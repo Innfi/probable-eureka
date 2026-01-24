@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"net"
 	"test-cni-plugin/pkg/config"
 	"test-cni-plugin/pkg/ipam"
 
@@ -21,13 +20,8 @@ func cmdAdd(args *skel.CmdArgs) error {
 		return fmt.Errorf("failed to parse config: %v", err)
 	}
 
-	fmt.Println("conf:", conf)
-	fmt.Println("ipam: ", conf.IPAM)
-
 	hostVeth := fmt.Sprintf("veth%s", args.ContainerID[:8])
 	containerVeth := args.IfName
-
-	fmt.Println("hostVeth: ", hostVeth)
 
 	netns, err := ns.GetNS(args.Netns)
 	if err != nil {
@@ -86,10 +80,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 		},
 		IPs: []*current.IPConfig{
 			{
-				Address: net.IPNet{
-					IP:   addr.IP,
-					Mask: net.CIDRMask(24, 32),
-				},
+				Address: *addr.IPNet,
 			},
 		},
 	}
