@@ -1,11 +1,75 @@
 package network
 
-// import (
-// 	"test-cni-plugin/pkg/iptableswrapper"
-// 	"test-cni-plugin/pkg/netlinkwrapper"
-// 	"test-cni-plugin/pkg/nswrapper"
-// )
+import (
+	"fmt"
+	"test-cni-plugin/pkg/config"
+	"test-cni-plugin/pkg/ipam"
+	"test-cni-plugin/pkg/netlinkwrapper"
+	"test-cni-plugin/pkg/nswrapper"
 
-// TODO: how to define the role and the responsibility
+	"github.com/containernetworking/plugins/pkg/ns"
+	"github.com/vishvananda/netlink"
+)
+
 type Network struct {
+	netlink netlinkwrapper.NetLink
+	ns      nswrapper.NS
+	ipam    ipam.IPAM
+}
+
+func New(config *config.IPAMConfig) *Network {
+	return &Network{
+		netlink: netlinkwrapper.NewNetlink(),
+		ns:      nswrapper.NewNS(),
+		ipam:    ipam.NewIPAM(config),
+	}
+}
+
+func (n *Network) SetupNetwork(netnsPath, hostVeth, containerVeth string) (*netlink.Addr, error) {
+	netns, err := n.ns.GetNS(netnsPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open netns: %v", err)
+	}
+	defer netns.Close()
+
+	veth := &netlink.Veth{
+		LinkAttrs: netlink.LinkAttrs{Name: hostVeth},
+		PeerName:  containerVeth,
+	}
+	if err := n.netlink.LinkAdd(veth); err != nil {
+		return nil, fmt.Errorf("failed to create veth pair: %v", err)
+	}
+
+	containerIface, err := n.netlink.LinkByName(containerVeth)
+	if err != nil {
+		return nil, err
+	}
+	if err := n.netlink.LinkSetNsFd(containerIface, int(netns.Fd())); err != nil {
+		return nil, err
+	}
+
+	var addr *netlink.Addr
+
+	if err := netns.Do(func(_ ns.NetNS) error {
+		link, err := n.netlink.LinkByName(containerVeth)
+		if err != nil {
+			return err
+		}
+
+		// need testing: BindNewAddr has to be called in the goroutine?
+		addr, err = n.ipam.BindNewAddr(link)
+		if err != nil {
+			return err
+		}
+
+		if err := n.netlink.LinkSetUp(link); err != nil {
+			return err
+		}
+
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return addr, nil
 }

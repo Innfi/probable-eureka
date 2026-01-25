@@ -6,8 +6,6 @@ import (
 	"github.com/coreos/go-iptables/iptables"
 )
 
-// TODO: any substitutes?
-
 type IPTablesIface interface {
 	// Exists(table, chain string, rulespec ...string) (bool, error)
 	// Insert(table, chain string, pos int, rulespec ...string) error
