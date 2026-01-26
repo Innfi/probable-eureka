@@ -4,14 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"test-cni-plugin/pkg/config"
-	"test-cni-plugin/pkg/ipam"
+	"test-cni-plugin/pkg/network"
 
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
 	current "github.com/containernetworking/cni/pkg/types/100"
 	"github.com/containernetworking/cni/pkg/version"
-	"github.com/containernetworking/plugins/pkg/ns"
-	"github.com/vishvananda/netlink"
 )
 
 func cmdAdd(args *skel.CmdArgs) error {
@@ -23,53 +21,10 @@ func cmdAdd(args *skel.CmdArgs) error {
 	hostVeth := fmt.Sprintf("veth%s", args.ContainerID[:8])
 	containerVeth := args.IfName
 
-	netns, err := ns.GetNS(args.Netns)
-	if err != nil {
-		return fmt.Errorf("failed to open netns: %v", err)
-	}
-	defer netns.Close()
-
-	veth := &netlink.Veth{
-		LinkAttrs: netlink.LinkAttrs{Name: hostVeth},
-		PeerName:  containerVeth,
-	}
-	if err := netlink.LinkAdd(veth); err != nil {
-		return fmt.Errorf("failed to create veth pair: %v", err)
-	}
-
-	containerIface, err := netlink.LinkByName(containerVeth)
+	n := network.New()
+	addr, err := n.SetupNetwork(args.Netns, hostVeth, containerVeth, conf.IPAM)
 	if err != nil {
 		return err
-	}
-	if err := netlink.LinkSetNsFd(containerIface, int(netns.Fd())); err != nil {
-		return err
-	}
-
-	ipamInstance := ipam.NewIPAM(conf.IPAM)
-	var addr *netlink.Addr
-
-	if err := netns.Do(func(_ ns.NetNS) error {
-		link, err := netlink.LinkByName(containerVeth)
-		if err != nil {
-			return err
-		}
-
-		addr, err = ipamInstance.BindNewAddr(link)
-		if err != nil {
-			return err
-		}
-
-		if err := netlink.LinkSetUp(link); err != nil {
-			return err
-		}
-
-		return nil
-	}); err != nil {
-		return err
-	}
-
-	if addr == nil {
-		return fmt.Errorf("addr never made it out of goroutine")
 	}
 
 	// set result
@@ -91,12 +46,9 @@ func cmdAdd(args *skel.CmdArgs) error {
 func cmdDel(args *skel.CmdArgs) error {
 	hostVeth := fmt.Sprintf("veth%s", args.ContainerID[:8])
 
-	link, err := netlink.LinkByName(hostVeth)
-	if err != nil {
-		return err
-	}
+	n := network.New()
 
-	return netlink.LinkDel(link)
+	return n.TeardownNetwork(hostVeth)
 }
 
 func cmdCheck(args *skel.CmdArgs) error {
@@ -104,13 +56,6 @@ func cmdCheck(args *skel.CmdArgs) error {
 }
 
 func main() {
-	fmt.Println("main")
-
-	// iptableswrapper.TestRunIptables()
-
-	// nswrapper.TestNS()
-
-	// netlinkwrapper.TestNetLink()
 	skel.PluginMainFuncs(skel.CNIFuncs{
 		Add:   cmdAdd,
 		Del:   cmdDel,

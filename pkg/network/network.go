@@ -14,18 +14,16 @@ import (
 type Network struct {
 	netlink netlinkwrapper.NetLink
 	ns      nswrapper.NS
-	ipam    ipam.IPAM
 }
 
-func New(config *config.IPAMConfig) *Network {
+func New() *Network {
 	return &Network{
 		netlink: netlinkwrapper.NewNetlink(),
 		ns:      nswrapper.NewNS(),
-		ipam:    ipam.NewIPAM(config),
 	}
 }
 
-func (n *Network) SetupNetwork(netnsPath, hostVeth, containerVeth string) (*netlink.Addr, error) {
+func (n *Network) SetupNetwork(netnsPath, hostVeth, containerVeth string, ipamConfig *config.IPAMConfig) (*netlink.Addr, error) {
 	netns, err := n.ns.GetNS(netnsPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open netns: %v", err)
@@ -48,6 +46,7 @@ func (n *Network) SetupNetwork(netnsPath, hostVeth, containerVeth string) (*netl
 		return nil, err
 	}
 
+	ipam := ipam.NewIPAM(ipamConfig)
 	var addr *netlink.Addr
 
 	if err := netns.Do(func(_ ns.NetNS) error {
@@ -57,7 +56,7 @@ func (n *Network) SetupNetwork(netnsPath, hostVeth, containerVeth string) (*netl
 		}
 
 		// need testing: BindNewAddr has to be called in the goroutine?
-		addr, err = n.ipam.BindNewAddr(link)
+		addr, err = ipam.BindNewAddr(link)
 		if err != nil {
 			return err
 		}
@@ -72,4 +71,13 @@ func (n *Network) SetupNetwork(netnsPath, hostVeth, containerVeth string) (*netl
 	}
 
 	return addr, nil
+}
+
+func (n *Network) TeardownNetwork(hostVeth string) error {
+	link, err := n.netlink.LinkByName(hostVeth)
+	if err != nil {
+		return err
+	}
+
+	return n.netlink.LinkDel(link)
 }
