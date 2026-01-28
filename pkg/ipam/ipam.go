@@ -1,12 +1,31 @@
 package ipam
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
+	"os"
+	"path/filepath"
+	"syscall"
 	"test-cni-plugin/pkg/config"
 
 	"github.com/vishvananda/netlink"
 )
+
+const (
+	defaultDataDir  = "/var/lib/cni/networks"
+	lockFileName    = ".lock"
+	allocationsFile = "allocations.json"
+)
+
+type Allocation struct {
+	IP          string `json:"ip"`
+	ContainerID string `json:"container_id"`
+}
+
+type AllocationStore struct {
+	Allocations []Allocation `json:"allocations"`
+}
 
 type IPAM struct {
 	config *config.IPAMConfig
@@ -16,7 +35,13 @@ func NewIPAM(config *config.IPAMConfig) IPAM {
 	return IPAM{config: config}
 }
 
-func (ipam *IPAM) BindNewAddr(link netlink.Link) (*netlink.Addr, error) {
+func (ipam *IPAM) BindNewAddr(link netlink.Link, containerID string) (*netlink.Addr, error) {
+	unlock, err := ipam.acquireLock()
+	if err != nil {
+		return nil, fmt.Errorf("failed to acquire lock: %w", err)
+	}
+	defer unlock()
+
 	addr, err := ipam.newAddr()
 	if err != nil {
 		return nil, err
@@ -26,7 +51,84 @@ func (ipam *IPAM) BindNewAddr(link netlink.Link) (*netlink.Addr, error) {
 		return nil, err
 	}
 
+	if err := ipam.saveAllocation(addr.IP.String(), containerID); err != nil {
+		return nil, fmt.Errorf("failed to save allocation: %w", err)
+	}
+
 	return addr, nil
+}
+
+func (ipam *IPAM) dataDir() string {
+	if ipam.config.DataDir != "" {
+		return ipam.config.DataDir
+	}
+	return defaultDataDir
+}
+
+func (ipam *IPAM) acquireLock() (func(), error) {
+	dir := ipam.dataDir()
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create data directory: %w", err)
+	}
+
+	lockPath := filepath.Join(dir, lockFileName)
+	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0600)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open lock file: %w", err)
+	}
+
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		f.Close()
+		return nil, fmt.Errorf("failed to acquire file lock: %w", err)
+	}
+
+	return func() {
+		syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+		f.Close()
+	}, nil
+}
+
+func (ipam *IPAM) loadAllocations() (*AllocationStore, error) {
+	allocPath := filepath.Join(ipam.dataDir(), allocationsFile)
+
+	data, err := os.ReadFile(allocPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return &AllocationStore{Allocations: []Allocation{}}, nil
+		}
+		return nil, fmt.Errorf("failed to read allocations file: %w", err)
+	}
+
+	var store AllocationStore
+	if err := json.Unmarshal(data, &store); err != nil {
+		return nil, fmt.Errorf("failed to parse allocations file: %w", err)
+	}
+
+	return &store, nil
+}
+
+func (ipam *IPAM) saveAllocation(ip, containerID string) error {
+	store, err := ipam.loadAllocations()
+	if err != nil {
+		return err
+	}
+
+	store.Allocations = append(store.Allocations, Allocation{
+		IP:          ip,
+		ContainerID: containerID,
+	})
+
+	data, err := json.MarshalIndent(store, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal allocations: %w", err)
+	}
+
+	allocPath := filepath.Join(ipam.dataDir(), allocationsFile)
+	if err := os.WriteFile(allocPath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write allocations file: %w", err)
+	}
+
+	return nil
 }
 
 func (ipam *IPAM) newAddr() (*netlink.Addr, error) {
@@ -72,8 +174,37 @@ func (ipam *IPAM) newAddr() (*netlink.Addr, error) {
 }
 
 func (ipam *IPAM) findAvailableIP(start, end net.IP) net.IP {
-	// TODO: implement persistence to track allocated IPs using ipam.config.DataDir
-	return cloneIP(start)
+	store, err := ipam.loadAllocations()
+	if err != nil {
+		return nil
+	}
+
+	allocatedIPs := make(map[string]bool)
+	for _, alloc := range store.Allocations {
+		allocatedIPs[alloc.IP] = true
+	}
+
+	for ip := cloneIP(start); !ipGreaterThan(ip, end); ip = nextIP(ip) {
+		if !allocatedIPs[ip.String()] {
+			return ip
+		}
+	}
+
+	return nil
+}
+
+func ipGreaterThan(a, b net.IP) bool {
+	a = a.To16()
+	b = b.To16()
+	for i := range a {
+		if a[i] > b[i] {
+			return true
+		}
+		if a[i] < b[i] {
+			return false
+		}
+	}
+	return false
 }
 
 func nextIP(ip net.IP) net.IP {

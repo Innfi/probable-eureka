@@ -23,7 +23,7 @@ func New() *Network {
 	}
 }
 
-func (n *Network) SetupNetwork(netnsPath, hostVeth, containerVeth string, ipamConfig *config.IPAMConfig) (*netlink.Addr, error) {
+func (n *Network) SetupNetwork(netnsPath, hostVeth, containerVeth, containerID string, ipamConfig *config.IPAMConfig) (*netlink.Addr, error) {
 	netns, err := n.ns.GetNS(netnsPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open netns: %v", err)
@@ -56,7 +56,7 @@ func (n *Network) SetupNetwork(netnsPath, hostVeth, containerVeth string, ipamCo
 		}
 
 		// need testing: BindNewAddr has to be called in the goroutine?
-		addr, err = ipam.BindNewAddr(link)
+		addr, err = ipam.BindNewAddr(link, containerID)
 		if err != nil {
 			return err
 		}

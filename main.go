@@ -22,7 +22,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 	containerVeth := args.IfName
 
 	n := network.New()
-	addr, err := n.SetupNetwork(args.Netns, hostVeth, containerVeth, conf.IPAM)
+	addr, err := n.SetupNetwork(args.Netns, hostVeth, containerVeth, args.ContainerID, conf.IPAM)
 	if err != nil {
 		return err
 	}
