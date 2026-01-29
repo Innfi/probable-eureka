@@ -7,7 +7,7 @@ fi
 
 # Run ADD
 export CNI_COMMAND=ADD
-export CNI_CONTAINERID=tester-innfisid
+export CNI_CONTAINERID=tester-ennfisnet
 export CNI_NETNS=/var/run/netns/test-ns
 export CNI_IFNAME=eth0
 export CNI_PATH=./
