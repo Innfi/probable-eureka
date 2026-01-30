@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"test-cni-plugin/pkg/config"
+	"test-cni-plugin/pkg/logging"
 	"test-cni-plugin/pkg/network"
+	"time"
 
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
@@ -13,8 +15,15 @@ import (
 )
 
 func cmdAdd(args *skel.CmdArgs) error {
+	start := time.Now()
+
 	conf := config.NetConf{}
 	if err := json.Unmarshal(args.StdinData, &conf); err != nil {
+		logging.Logger.Error("cni_command_failed",
+			"operation", "add",
+			"container_id", args.ContainerID,
+			"error", err.Error(),
+		)
 		return fmt.Errorf("failed to parse config: %v", err)
 	}
 
@@ -24,8 +33,26 @@ func cmdAdd(args *skel.CmdArgs) error {
 	n := network.New()
 	addr, err := n.SetupNetwork(args.Netns, hostVeth, containerVeth, args.ContainerID, conf.IPAM)
 	if err != nil {
+		logging.Logger.Error("cni_command_failed",
+			"operation", "add",
+			"container_id", args.ContainerID,
+			"netns", args.Netns,
+			"ifname", args.IfName,
+			"duration_ms", time.Since(start).Milliseconds(),
+			"error", err.Error(),
+		)
 		return err
 	}
+
+	logging.Logger.Info("cni_command_completed",
+		"operation", "add",
+		"container_id", args.ContainerID,
+		"netns", args.Netns,
+		"ifname", args.IfName,
+		"allocated_ip", addr.IPNet.String(),
+		"duration_ms", time.Since(start).Milliseconds(),
+		"status", "success",
+	)
 
 	// set result
 	result := &current.Result{
@@ -44,11 +71,32 @@ func cmdAdd(args *skel.CmdArgs) error {
 }
 
 func cmdDel(args *skel.CmdArgs) error {
+	start := time.Now()
 	hostVeth := fmt.Sprintf("veth%s", args.ContainerID[:8])
+
+	logging.Logger.Info("cmdDel",
+		"hostVeth", hostVeth,
+	)
 
 	n := network.New()
 
-	return n.TeardownNetwork(hostVeth)
+	if err := n.TeardownNetwork(hostVeth); err != nil {
+		logging.Logger.Error("cni_command_failed",
+			"operation", "del",
+			"container_id", args.ContainerID,
+			"duration_ms", time.Since(start).Milliseconds(),
+			"error", err.Error(),
+		)
+		return err
+	}
+
+	logging.Logger.Info("cni_command_completed",
+		"operation", "del",
+		"container_id", args.ContainerID,
+		"duration_ms", time.Since(start).Milliseconds(),
+		"status", "success",
+	)
+	return nil
 }
 
 func cmdCheck(args *skel.CmdArgs) error {
@@ -56,6 +104,10 @@ func cmdCheck(args *skel.CmdArgs) error {
 }
 
 func main() {
+	if err := logging.Init(""); err != nil {
+		logging.InitStderr()
+	}
+
 	skel.PluginMainFuncs(skel.CNIFuncs{
 		Add:   cmdAdd,
 		Del:   cmdDel,

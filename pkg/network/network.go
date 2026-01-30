@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"test-cni-plugin/pkg/config"
 	"test-cni-plugin/pkg/ipam"
+	"test-cni-plugin/pkg/logging"
 	"test-cni-plugin/pkg/netlinkwrapper"
 	"test-cni-plugin/pkg/nswrapper"
 
@@ -24,6 +25,12 @@ func New() *Network {
 }
 
 func (n *Network) SetupNetwork(netnsPath, hostVeth, containerVeth, containerID string, ipamConfig *config.IPAMConfig) (*netlink.Addr, error) {
+	logging.Logger.Info("SetupNetwork",
+		"host_veth", hostVeth,
+		"container_veth", containerVeth,
+		"container_id", containerID,
+	)
+
 	netns, err := n.ns.GetNS(netnsPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open netns: %v", err)

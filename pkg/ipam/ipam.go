@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"syscall"
 	"test-cni-plugin/pkg/config"
+	"test-cni-plugin/pkg/logging"
 
 	"github.com/vishvananda/netlink"
 )
@@ -54,6 +55,11 @@ func (ipam *IPAM) BindNewAddr(link netlink.Link, containerID string) (*netlink.A
 	if err := ipam.saveAllocation(addr.IP.String(), containerID); err != nil {
 		return nil, fmt.Errorf("failed to save allocation: %w", err)
 	}
+
+	logging.Logger.Info("ip_allocated",
+		"allocated_ip", addr.IP.String(),
+		"container_id", containerID,
+	)
 
 	return addr, nil
 }
