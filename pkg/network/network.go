@@ -45,11 +45,19 @@ func (n *Network) SetupNetwork(netnsPath, hostVeth, containerVeth, containerID s
 		return nil, fmt.Errorf("failed to create veth pair: %v", err)
 	}
 
+	cleanupVeth := func() {
+		if link, err := n.netlink.LinkByName(hostVeth); err == nil {
+			n.netlink.LinkDel(link)
+		}
+	}
+
 	containerIface, err := n.netlink.LinkByName(containerVeth)
 	if err != nil {
+		cleanupVeth()
 		return nil, err
 	}
 	if err := n.netlink.LinkSetNsFd(containerIface, int(netns.Fd())); err != nil {
+		cleanupVeth()
 		return nil, err
 	}
 
@@ -74,6 +82,7 @@ func (n *Network) SetupNetwork(netnsPath, hostVeth, containerVeth, containerID s
 
 		return nil
 	}); err != nil {
+		cleanupVeth()
 		return nil, err
 	}
 
