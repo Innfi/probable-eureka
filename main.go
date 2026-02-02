@@ -100,6 +100,42 @@ func cmdDel(args *skel.CmdArgs) error {
 }
 
 func cmdCheck(args *skel.CmdArgs) error {
+	start := time.Now()
+
+	conf := config.NetConf{}
+	if err := json.Unmarshal(args.StdinData, &conf); err != nil {
+		return fmt.Errorf("failed to parse config: %v", err)
+	}
+
+	if conf.PrevResult == nil {
+		return fmt.Errorf("missing prevResult from runtime")
+	}
+
+	prevResult, err := current.GetResult(conf.PrevResult)
+	if err != nil {
+		return fmt.Errorf("failed to parse prevResult: %v", err)
+	}
+
+	hostVeth := fmt.Sprintf("veth%s", args.ContainerID[:8])
+	n := network.New()
+
+	if err := n.CheckNetwork(args.Netns, hostVeth, args.IfName, prevResult.IPs); err != nil {
+		logging.Logger.Error("cni_command_failed",
+			"operation", "check",
+			"container_id", args.ContainerID,
+			"duration_ms", time.Since(start).Milliseconds(),
+			"error", err.Error(),
+		)
+		return err
+	}
+
+	logging.Logger.Info("cni_command_completed",
+		"operation", "check",
+		"container_id", args.ContainerID,
+		"duration_ms", time.Since(start).Milliseconds(),
+		"status", "success",
+	)
+
 	return nil
 }
 

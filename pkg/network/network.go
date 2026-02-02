@@ -2,12 +2,14 @@ package network
 
 import (
 	"fmt"
+	"net"
 	"test-cni-plugin/pkg/config"
 	"test-cni-plugin/pkg/ipam"
 	"test-cni-plugin/pkg/logging"
 	"test-cni-plugin/pkg/netlinkwrapper"
 	"test-cni-plugin/pkg/nswrapper"
 
+	current "github.com/containernetworking/cni/pkg/types/100"
 	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/vishvananda/netlink"
 )
@@ -87,6 +89,53 @@ func (n *Network) SetupNetwork(netnsPath, hostVeth, containerVeth, containerID s
 	}
 
 	return addr, nil
+}
+
+func (n *Network) CheckNetwork(netnsPath, hostVeth, containerVeth string, expectedIPs []*current.IPConfig) error {
+	// Verify host veth exists
+	if _, err := n.netlink.LinkByName(hostVeth); err != nil {
+		return fmt.Errorf("host veth %s not found: %v", hostVeth, err)
+	}
+
+	// Verify container veth and IPs inside netns
+	netns, err := n.ns.GetNS(netnsPath)
+	if err != nil {
+		return fmt.Errorf("failed to open netns: %v", err)
+	}
+	defer netns.Close()
+
+	return netns.Do(func(_ ns.NetNS) error {
+		link, err := n.netlink.LinkByName(containerVeth)
+		if err != nil {
+			return fmt.Errorf("container veth %s not found: %v", containerVeth, err)
+		}
+
+		// Verify link is up
+		if link.Attrs().OperState != netlink.OperUp && (link.Attrs().Flags&net.FlagUp) == 0 {
+			return fmt.Errorf("container veth %s is not up", containerVeth)
+		}
+
+		// Verify expected IPs are present
+		addrs, err := n.netlink.AddrList(link, netlink.FAMILY_ALL)
+		if err != nil {
+			return fmt.Errorf("failed to list addresses: %v", err)
+		}
+
+		for _, expected := range expectedIPs {
+			found := false
+			for _, addr := range addrs {
+				if addr.IPNet.IP.Equal(expected.Address.IP) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return fmt.Errorf("expected IP %s not found on %s", expected.Address.IP, containerVeth)
+			}
+		}
+
+		return nil
+	})
 }
 
 func (n *Network) TeardownNetwork(hostVeth string) error {

@@ -9,7 +9,7 @@ fi
 export CNI_COMMAND=ADD
 export CNI_CONTAINERID=a0000002-tester
 export CNI_NETNS=/var/run/netns/test-ns2
-export CNI_IFNAME=eth0
+export CNI_IFNAME=eth1
 export CNI_PATH=./
 
 # Call the plugin with network config on stdin
