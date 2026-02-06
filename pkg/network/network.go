@@ -146,3 +146,8 @@ func (n *Network) TeardownNetwork(hostVeth string) error {
 
 	return n.netlink.LinkDel(link)
 }
+
+func (n *Network) CheckPluginStatus(ipamConfig *config.IPAMConfig) error {
+	i := ipam.NewIPAM(ipamConfig)
+	return i.CheckStatus()
+}

@@ -139,14 +139,38 @@ func cmdCheck(args *skel.CmdArgs) error {
 	return nil
 }
 
+func cmdStatus(args *skel.CmdArgs) error {
+	conf := config.NetConf{}
+	if err := json.Unmarshal(args.StdinData, &conf); err != nil {
+		return fmt.Errorf("failed to parse config: %v", err)
+	}
+
+	n := network.New()
+	if err := n.CheckPluginStatus(conf.IPAM); err != nil {
+		logging.Logger.Error("cni_command_failed",
+			"operation", "status",
+			"error", err.Error(),
+		)
+		return err
+	}
+
+	logging.Logger.Info("cni_command_completed",
+		"operation", "status",
+		"status", "ready",
+	)
+
+	return nil
+}
+
 func main() {
 	if err := logging.Init(""); err != nil {
 		logging.InitStderr()
 	}
 
 	skel.PluginMainFuncs(skel.CNIFuncs{
-		Add:   cmdAdd,
-		Del:   cmdDel,
-		Check: cmdCheck,
+		Add:    cmdAdd,
+		Del:    cmdDel,
+		Check:  cmdCheck,
+		Status: cmdStatus,
 	}, version.All, "test-cni v1.0.0")
 }

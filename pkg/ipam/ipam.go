@@ -198,3 +198,45 @@ func (ipam *IPAM) findAvailableIP(start, end net.IP) net.IP {
 
 	return nil
 }
+
+func (ipam *IPAM) CheckStatus() error {
+	dir := ipam.dataDir()
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("IPAM data directory not accessible: %w", err)
+	}
+
+	if len(ipam.config.Ranges) == 0 || len(ipam.config.Ranges[0]) == 0 {
+		return fmt.Errorf("no IP ranges configured")
+	}
+
+	rangeConfig := ipam.config.Ranges[0][0]
+	_, subnet, err := net.ParseCIDR(rangeConfig.Subnet)
+	if err != nil {
+		return fmt.Errorf("invalid subnet configuration: %w", err)
+	}
+
+	var startIP, endIP net.IP
+	if rangeConfig.RangeStart != "" {
+		startIP = net.ParseIP(rangeConfig.RangeStart)
+		if startIP == nil {
+			return fmt.Errorf("invalid rangeStart configuration")
+		}
+	} else {
+		startIP = nextIP(subnet.IP)
+	}
+
+	if rangeConfig.RangeEnd != "" {
+		endIP = net.ParseIP(rangeConfig.RangeEnd)
+		if endIP == nil {
+			return fmt.Errorf("invalid rangeEnd configuration")
+		}
+	} else {
+		endIP = lastIP(subnet)
+	}
+
+	if ipam.findAvailableIP(startIP, endIP) == nil {
+		return fmt.Errorf("no available IP addresses in configured range")
+	}
+
+	return nil
+}
