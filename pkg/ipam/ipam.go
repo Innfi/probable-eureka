@@ -199,6 +199,45 @@ func (ipam *IPAM) findAvailableIP(start, end net.IP) net.IP {
 	return nil
 }
 
+func (ipam *IPAM) ReleaseStaleAllocations(validContainerIDs map[string]bool) ([]Allocation, error) {
+	unlock, err := ipam.acquireLock()
+	if err != nil {
+		return nil, fmt.Errorf("failed to acquire lock: %w", err)
+	}
+	defer unlock()
+
+	store, err := ipam.loadAllocations()
+	if err != nil {
+		return nil, err
+	}
+
+	var kept []Allocation
+	var released []Allocation
+	for _, alloc := range store.Allocations {
+		if validContainerIDs[alloc.ContainerID] {
+			kept = append(kept, alloc)
+		} else {
+			released = append(released, alloc)
+		}
+	}
+
+	if len(released) == 0 {
+		return nil, nil
+	}
+
+	data, err := json.MarshalIndent(&AllocationStore{Allocations: kept}, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal allocations: %w", err)
+	}
+
+	allocPath := filepath.Join(ipam.dataDir(), allocationsFile)
+	if err := os.WriteFile(allocPath, data, 0644); err != nil {
+		return nil, fmt.Errorf("failed to write allocations file: %w", err)
+	}
+
+	return released, nil
+}
+
 func (ipam *IPAM) CheckStatus() error {
 	dir := ipam.dataDir()
 	if err := os.MkdirAll(dir, 0755); err != nil {

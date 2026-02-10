@@ -147,6 +147,58 @@ func (n *Network) TeardownNetwork(hostVeth string) error {
 	return n.netlink.LinkDel(link)
 }
 
+func (n *Network) GarbageCollect(ipamConfig *config.IPAMConfig, validContainerIDs map[string]bool) error {
+	// Clean up orphaned veth pairs
+	links, err := n.netlink.LinkList()
+	if err != nil {
+		return fmt.Errorf("failed to list links: %v", err)
+	}
+
+	for _, link := range links {
+		name := link.Attrs().Name
+		if len(name) < 5 || name[:4] != "veth" {
+			continue
+		}
+
+		containerIDPrefix := name[4:]
+		orphaned := true
+		for id := range validContainerIDs {
+			if len(id) >= 8 && id[:8] == containerIDPrefix {
+				orphaned = false
+				break
+			}
+		}
+
+		if orphaned {
+			logging.Logger.Info("gc_removing_veth",
+				"veth", name,
+			)
+			if err := n.netlink.LinkDel(link); err != nil {
+				logging.Logger.Error("gc_remove_veth_failed",
+					"veth", name,
+					"error", err.Error(),
+				)
+			}
+		}
+	}
+
+	// Clean up stale IP allocations
+	i := ipam.NewIPAM(ipamConfig)
+	released, err := i.ReleaseStaleAllocations(validContainerIDs)
+	if err != nil {
+		return fmt.Errorf("failed to release stale allocations: %v", err)
+	}
+
+	for _, alloc := range released {
+		logging.Logger.Info("gc_released_ip",
+			"ip", alloc.IP,
+			"container_id", alloc.ContainerID,
+		)
+	}
+
+	return nil
+}
+
 func (n *Network) CheckPluginStatus(ipamConfig *config.IPAMConfig) error {
 	i := ipam.NewIPAM(ipamConfig)
 	return i.CheckStatus()

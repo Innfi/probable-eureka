@@ -162,6 +162,39 @@ func cmdStatus(args *skel.CmdArgs) error {
 	return nil
 }
 
+func cmdGC(args *skel.CmdArgs) error {
+	start := time.Now()
+
+	conf := config.NetConf{}
+	if err := json.Unmarshal(args.StdinData, &conf); err != nil {
+		return fmt.Errorf("failed to parse config: %v", err)
+	}
+
+	validContainerIDs := make(map[string]bool)
+	for _, attachment := range conf.ValidAttachments {
+		validContainerIDs[attachment.ContainerID] = true
+	}
+
+	n := network.New()
+	if err := n.GarbageCollect(conf.IPAM, validContainerIDs); err != nil {
+		logging.Logger.Error("cni_command_failed",
+			"operation", "gc",
+			"duration_ms", time.Since(start).Milliseconds(),
+			"error", err.Error(),
+		)
+		return err
+	}
+
+	logging.Logger.Info("cni_command_completed",
+		"operation", "gc",
+		"valid_attachments", len(conf.ValidAttachments),
+		"duration_ms", time.Since(start).Milliseconds(),
+		"status", "success",
+	)
+
+	return nil
+}
+
 func main() {
 	if err := logging.Init(""); err != nil {
 		logging.InitStderr()
@@ -172,5 +205,6 @@ func main() {
 		Del:    cmdDel,
 		Check:  cmdCheck,
 		Status: cmdStatus,
+		GC:     cmdGC,
 	}, version.All, "test-cni v1.0.0")
 }
