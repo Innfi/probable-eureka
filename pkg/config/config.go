@@ -4,7 +4,8 @@ import "github.com/containernetworking/cni/pkg/types"
 
 type NetConf struct {
 	types.NetConf
-	IPAM *IPAMConfig `json:"ipam"`
+	Bridge string      `json:"bridge"`
+	IPAM   *IPAMConfig `json:"ipam"`
 }
 
 type IPAMConfig struct {

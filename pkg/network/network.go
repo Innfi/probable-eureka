@@ -26,11 +26,38 @@ func New() *Network {
 	}
 }
 
-func (n *Network) SetupNetwork(netnsPath, hostVeth, containerVeth, containerID string, ipamConfig *config.IPAMConfig) (*netlink.Addr, error) {
+func (n *Network) ensureBridge(bridgeName string) (netlink.Link, error) {
+	br, err := n.netlink.LinkByName(bridgeName)
+	if err == nil {
+		return br, nil
+	}
+
+	bridge := &netlink.Bridge{
+		LinkAttrs: netlink.LinkAttrs{Name: bridgeName},
+	}
+	if err := n.netlink.LinkAdd(bridge); err != nil {
+		return nil, fmt.Errorf("failed to create bridge %s: %w", bridgeName, err)
+	}
+
+	br, err = n.netlink.LinkByName(bridgeName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find bridge %s after creation: %w", bridgeName, err)
+	}
+
+	if err := n.netlink.LinkSetUp(br); err != nil {
+		return nil, fmt.Errorf("failed to bring up bridge %s: %w", bridgeName, err)
+	}
+
+	logging.Logger.Info("bridge_created", "bridge", bridgeName)
+	return br, nil
+}
+
+func (n *Network) SetupNetwork(netnsPath, hostVeth, containerVeth, containerID, bridgeName string, ipamConfig *config.IPAMConfig) (*netlink.Addr, error) {
 	logging.Logger.Info("SetupNetwork",
 		"host_veth", hostVeth,
 		"container_veth", containerVeth,
 		"container_id", containerID,
+		"bridge", bridgeName,
 	)
 
 	netns, err := n.ns.GetNS(netnsPath)
@@ -50,6 +77,30 @@ func (n *Network) SetupNetwork(netnsPath, hostVeth, containerVeth, containerID s
 	cleanupVeth := func() {
 		if link, err := n.netlink.LinkByName(hostVeth); err == nil {
 			n.netlink.LinkDel(link)
+		}
+	}
+
+	if bridgeName != "" {
+		br, err := n.ensureBridge(bridgeName)
+		if err != nil {
+			cleanupVeth()
+			return nil, err
+		}
+
+		hostIface, err := n.netlink.LinkByName(hostVeth)
+		if err != nil {
+			cleanupVeth()
+			return nil, fmt.Errorf("failed to find host veth %s: %w", hostVeth, err)
+		}
+
+		if err := n.netlink.LinkSetMaster(hostIface, br); err != nil {
+			cleanupVeth()
+			return nil, fmt.Errorf("failed to attach %s to bridge %s: %w", hostVeth, bridgeName, err)
+		}
+
+		if err := n.netlink.LinkSetUp(hostIface); err != nil {
+			cleanupVeth()
+			return nil, fmt.Errorf("failed to bring up host veth %s: %w", hostVeth, err)
 		}
 	}
 

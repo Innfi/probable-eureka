@@ -31,7 +31,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 	containerVeth := args.IfName
 
 	n := network.New()
-	addr, err := n.SetupNetwork(args.Netns, hostVeth, containerVeth, args.ContainerID, conf.IPAM)
+	addr, err := n.SetupNetwork(args.Netns, hostVeth, containerVeth, args.ContainerID, conf.Bridge, conf.IPAM)
 	if err != nil {
 		logging.Logger.Error("cni_command_failed",
 			"operation", "add",
