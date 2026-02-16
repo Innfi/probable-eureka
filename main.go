@@ -14,6 +14,15 @@ import (
 	"github.com/containernetworking/cni/pkg/version"
 )
 
+const (
+	vethPrefix           = "veth"
+	containerIDPrefixLen = 8
+)
+
+func hostVethName(containerID string) string {
+	return vethPrefix + containerID[:containerIDPrefixLen]
+}
+
 func cmdAdd(args *skel.CmdArgs) error {
 	start := time.Now()
 
@@ -27,7 +36,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 		return fmt.Errorf("failed to parse config: %v", err)
 	}
 
-	hostVeth := fmt.Sprintf("veth%s", args.ContainerID[:8])
+	hostVeth := hostVethName(args.ContainerID)
 	containerVeth := args.IfName
 
 	n := network.New()
@@ -72,7 +81,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 
 func cmdDel(args *skel.CmdArgs) error {
 	start := time.Now()
-	hostVeth := fmt.Sprintf("veth%s", args.ContainerID[:8])
+	hostVeth := hostVethName(args.ContainerID)
 
 	logging.Logger.Info("cmdDel",
 		"hostVeth", hostVeth,
@@ -116,7 +125,7 @@ func cmdCheck(args *skel.CmdArgs) error {
 		return fmt.Errorf("failed to parse prevResult: %v", err)
 	}
 
-	hostVeth := fmt.Sprintf("veth%s", args.ContainerID[:8])
+	hostVeth := hostVethName(args.ContainerID)
 	n := network.New()
 
 	if err := n.CheckNetwork(args.Netns, hostVeth, args.IfName, prevResult.IPs); err != nil {

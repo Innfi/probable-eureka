@@ -137,23 +137,22 @@ func (ipam *IPAM) saveAllocation(ip, containerID string) error {
 	return nil
 }
 
-func (ipam *IPAM) newAddr() (*netlink.Addr, error) {
+func (ipam *IPAM) parseIPRange() (startIP, endIP net.IP, subnet *net.IPNet, err error) {
 	if len(ipam.config.Ranges) == 0 || len(ipam.config.Ranges[0]) == 0 {
-		return nil, fmt.Errorf("no IP ranges configured")
+		return nil, nil, nil, fmt.Errorf("no IP ranges configured")
 	}
 
 	rangeConfig := ipam.config.Ranges[0][0]
 
-	_, subnet, err := net.ParseCIDR(rangeConfig.Subnet)
+	_, subnet, err = net.ParseCIDR(rangeConfig.Subnet)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse subnet %s: %w", rangeConfig.Subnet, err)
+		return nil, nil, nil, fmt.Errorf("failed to parse subnet %s: %w", rangeConfig.Subnet, err)
 	}
 
-	var startIP, endIP net.IP
 	if rangeConfig.RangeStart != "" {
 		startIP = net.ParseIP(rangeConfig.RangeStart)
 		if startIP == nil {
-			return nil, fmt.Errorf("failed to parse rangeStart %s", rangeConfig.RangeStart)
+			return nil, nil, nil, fmt.Errorf("failed to parse rangeStart %s", rangeConfig.RangeStart)
 		}
 	} else {
 		startIP = nextIP(subnet.IP)
@@ -162,10 +161,19 @@ func (ipam *IPAM) newAddr() (*netlink.Addr, error) {
 	if rangeConfig.RangeEnd != "" {
 		endIP = net.ParseIP(rangeConfig.RangeEnd)
 		if endIP == nil {
-			return nil, fmt.Errorf("failed to parse rangeEnd %s", rangeConfig.RangeEnd)
+			return nil, nil, nil, fmt.Errorf("failed to parse rangeEnd %s", rangeConfig.RangeEnd)
 		}
 	} else {
 		endIP = lastIP(subnet)
+	}
+
+	return startIP, endIP, subnet, nil
+}
+
+func (ipam *IPAM) newAddr() (*netlink.Addr, error) {
+	startIP, endIP, subnet, err := ipam.parseIPRange()
+	if err != nil {
+		return nil, err
 	}
 
 	ip := ipam.findAvailableIP(startIP, endIP)
@@ -244,33 +252,9 @@ func (ipam *IPAM) CheckStatus() error {
 		return fmt.Errorf("IPAM data directory not accessible: %w", err)
 	}
 
-	if len(ipam.config.Ranges) == 0 || len(ipam.config.Ranges[0]) == 0 {
-		return fmt.Errorf("no IP ranges configured")
-	}
-
-	rangeConfig := ipam.config.Ranges[0][0]
-	_, subnet, err := net.ParseCIDR(rangeConfig.Subnet)
+	startIP, endIP, _, err := ipam.parseIPRange()
 	if err != nil {
-		return fmt.Errorf("invalid subnet configuration: %w", err)
-	}
-
-	var startIP, endIP net.IP
-	if rangeConfig.RangeStart != "" {
-		startIP = net.ParseIP(rangeConfig.RangeStart)
-		if startIP == nil {
-			return fmt.Errorf("invalid rangeStart configuration")
-		}
-	} else {
-		startIP = nextIP(subnet.IP)
-	}
-
-	if rangeConfig.RangeEnd != "" {
-		endIP = net.ParseIP(rangeConfig.RangeEnd)
-		if endIP == nil {
-			return fmt.Errorf("invalid rangeEnd configuration")
-		}
-	} else {
-		endIP = lastIP(subnet)
+		return err
 	}
 
 	if ipam.findAvailableIP(startIP, endIP) == nil {
