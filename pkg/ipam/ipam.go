@@ -7,8 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"syscall"
-	"test-cni-plugin/pkg/config"
-	"test-cni-plugin/pkg/logging"
+
+	"github.com/innfi/probable-eureka/pkg/config"
+	"github.com/innfi/probable-eureka/pkg/logging"
 
 	"github.com/vishvananda/netlink"
 )

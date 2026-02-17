@@ -6,7 +6,7 @@ export CNI_CONTAINERID=a0000002-tester
 export CNI_NETNS=/var/run/netns/test-ns2
 export CNI_IFNAME=eth1
 export CNI_PATH=./
-cat ./scripts/cni.conf | ./test-cni-plugin
+cat ./scripts/cni.conf | ./probable-eureka
 
 # Remove test namespace
 # sudo ip netns del test-ns

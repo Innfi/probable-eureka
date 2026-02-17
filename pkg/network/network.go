@@ -3,11 +3,12 @@ package network
 import (
 	"fmt"
 	"net"
-	"test-cni-plugin/pkg/config"
-	"test-cni-plugin/pkg/ipam"
-	"test-cni-plugin/pkg/logging"
-	"test-cni-plugin/pkg/netlinkwrapper"
-	"test-cni-plugin/pkg/nswrapper"
+
+	"github.com/innfi/probable-eureka/pkg/config"
+	"github.com/innfi/probable-eureka/pkg/ipam"
+	"github.com/innfi/probable-eureka/pkg/logging"
+	"github.com/innfi/probable-eureka/pkg/netlinkwrapper"
+	"github.com/innfi/probable-eureka/pkg/nswrapper"
 
 	current "github.com/containernetworking/cni/pkg/types/100"
 	"github.com/containernetworking/plugins/pkg/ns"

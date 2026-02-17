@@ -1,4 +1,4 @@
-module test-cni-plugin
+module github.com/innfi/probable-eureka
 
 go 1.25.5
 

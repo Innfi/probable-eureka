@@ -13,4 +13,4 @@ export CNI_IFNAME=eth1
 export CNI_PATH=./
 
 # Call the plugin with network config on stdin
-cat ./scripts/cni.conf | ./test-cni-plugin
+cat ./scripts/cni.conf | ./probable-eureka

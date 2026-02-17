@@ -3,10 +3,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"test-cni-plugin/pkg/config"
-	"test-cni-plugin/pkg/logging"
-	"test-cni-plugin/pkg/network"
 	"time"
+
+	"github.com/innfi/probable-eureka/pkg/config"
+	"github.com/innfi/probable-eureka/pkg/logging"
+	"github.com/innfi/probable-eureka/pkg/network"
 
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
@@ -215,5 +216,5 @@ func main() {
 		Check:  cmdCheck,
 		Status: cmdStatus,
 		GC:     cmdGC,
-	}, version.All, "test-cni v1.0.0")
+	}, version.All, "probable-eureka v1.0.0")
 }
