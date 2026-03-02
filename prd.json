@@ -1,0 +1,48 @@
+{
+  "project": "probable-eureka",
+  "description": "CNI plugin with integrated IPAM for Kubernetes/containerd",
+  "stories": [
+    {
+      "id": "ipam-release",
+      "title": "IPAM: release IP allocation on DEL",
+      "description": "Add ReleaseAddr(containerID string) error to pkg/ipam/ipam.go that removes the matching entry from allocations.json. Wire it into network.TeardownNetwork so DEL actually frees the IP. Currently TeardownNetwork only deletes the host veth, leaving a stale allocation in the store.",
+      "acceptance": "go test ./pkg/ipam/... passes; calling BindNewAddr then ReleaseAddr then BindNewAddr again reuses the same IP.",
+      "status": "incomplete"
+    },
+    {
+      "id": "network-default-route",
+      "title": "Add default route inside container netns",
+      "description": "In network.SetupNetwork, after BindNewAddr succeeds inside the netns.Do block, call netlink.RouteAdd to install a default route via the gateway IP from ipamConfig.Ranges[0][0].Gateway. If no gateway is configured, skip. Use the netlinkwrapper interface (n.netlink) so it is mockable.",
+      "acceptance": "make vet && make build pass; manual test shows 'ip route' inside container netns has a default route.",
+      "status": "incomplete"
+    },
+    {
+      "id": "iptables-masq",
+      "title": "Expand iptableswrapper and add masquerade rule",
+      "description": "Uncomment and implement the Append/AppendUnique/Exists/Delete methods on IPTablesIface in pkg/iptableswrapper/iptables.go. Then in network.SetupNetwork, after veth setup, call AppendUnique on the POSTROUTING chain in the nat table with a MASQUERADE rule for the pod subnet. Add a corresponding delete in TeardownNetwork only if the bridge has no remaining ports.",
+      "acceptance": "make vet && make build pass; iptableswrapper unit test covers Append/Exists/Delete via a mock.",
+      "status": "incomplete"
+    },
+    {
+      "id": "unit-ipam",
+      "title": "Unit tests for pkg/ipam",
+      "description": "Write pkg/ipam/ipam_test.go with table-driven tests. Set IPAMConfig.DataDir to t.TempDir() to avoid filesystem side effects. Cover: (1) BindNewAddr allocates an IP in range, (2) two allocations get different IPs, (3) ReleaseAddr frees the IP and a third BindNewAddr reuses it, (4) ReleaseStaleAllocations removes only invalid container IDs, (5) CheckStatus returns error when no ranges configured.",
+      "acceptance": "go test ./pkg/ipam/... -v passes without root privileges.",
+      "status": "incomplete"
+    },
+    {
+      "id": "unit-network",
+      "title": "Unit tests for pkg/network with mock interfaces",
+      "description": "Add mock implementations of netlinkwrapper.NetLink and nswrapper.NS (using simple structs that record calls and return preset values). Write pkg/network/network_test.go covering: (1) SetupNetwork happy path returns an addr, (2) SetupNetwork rolls back veth if bridge attach fails, (3) TeardownNetwork calls LinkDel with correct name, (4) CheckNetwork returns error when host veth missing.",
+      "acceptance": "go test ./pkg/network/... -v passes without root privileges.",
+      "status": "incomplete"
+    },
+    {
+      "id": "integration-script",
+      "title": "Integration test shell script via cnitool",
+      "description": "Create scripts/integration-test.sh. It should: build the binary with 'make build', install to /opt/cni/bin, create a test CNI config at /etc/cni/net.d/99-eureka-test.conflist, create a network namespace, invoke the plugin directly with CNI_COMMAND=ADD/CHECK/DEL env vars and validate the JSON result, then clean up. Requires root; skip gracefully if not root.",
+      "acceptance": "scripts/integration-test.sh exits 0 on a machine with the build dependencies installed.",
+      "status": "incomplete"
+    }
+  ]
+}
