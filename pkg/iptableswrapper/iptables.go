@@ -7,18 +7,13 @@ import (
 )
 
 type IPTablesIface interface {
-	// Exists(table, chain string, rulespec ...string) (bool, error)
-	// Insert(table, chain string, pos int, rulespec ...string) error
-	// Append(table, chain string, rulespec ...string) error
-	// AppendUnique(table, chain string, rulespec ...string) error
-	// Delete(table, chain string, reulespec ...string) error
+	Exists(table, chain string, rulespec ...string) (bool, error)
+	Append(table, chain string, rulespec ...string) error
+	AppendUnique(table, chain string, rulespec ...string) error
+	Delete(table, chain string, rulespec ...string) error
 	List(table, chain string) ([]string, error)
-	// NewChain(table, chain string) error
-	// ClearChain(table, chain string) error
-	// DeleteChain(table, chain string) error
 	ListChains(table string) ([]string, error)
 	ChainExists(table, chain string) (bool, error)
-	// HasRandomFully() bool
 }
 
 type ipTables struct {
@@ -32,6 +27,22 @@ func NewIPTables(protocol iptables.Protocol) (IPTablesIface, error) {
 	}
 
 	return &ipTables{ipt: ipt}, nil
+}
+
+func (i ipTables) Exists(table, chain string, rulespec ...string) (bool, error) {
+	return i.ipt.Exists(table, chain, rulespec...)
+}
+
+func (i ipTables) Append(table, chain string, rulespec ...string) error {
+	return i.ipt.Append(table, chain, rulespec...)
+}
+
+func (i ipTables) AppendUnique(table, chain string, rulespec ...string) error {
+	return i.ipt.AppendUnique(table, chain, rulespec...)
+}
+
+func (i ipTables) Delete(table, chain string, rulespec ...string) error {
+	return i.ipt.Delete(table, chain, rulespec...)
 }
 
 func (i ipTables) List(table, chain string) ([]string, error) {

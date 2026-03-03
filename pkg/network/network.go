@@ -6,11 +6,13 @@ import (
 
 	"github.com/innfi/probable-eureka/pkg/config"
 	"github.com/innfi/probable-eureka/pkg/ipam"
+	"github.com/innfi/probable-eureka/pkg/iptableswrapper"
 	"github.com/innfi/probable-eureka/pkg/logging"
 	"github.com/innfi/probable-eureka/pkg/netlinkwrapper"
 	"github.com/innfi/probable-eureka/pkg/nswrapper"
 
 	current "github.com/containernetworking/cni/pkg/types/100"
+	goiptables "github.com/coreos/go-iptables/iptables"
 	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/vishvananda/netlink"
 )
@@ -18,12 +20,15 @@ import (
 type Network struct {
 	netlink netlinkwrapper.NetLink
 	ns      nswrapper.NS
+	ipt     iptableswrapper.IPTablesIface
 }
 
 func New() *Network {
+	ipt, _ := iptableswrapper.NewIPTables(goiptables.ProtocolIPv4)
 	return &Network{
 		netlink: netlinkwrapper.NewNetlink(),
 		ns:      nswrapper.NewNS(),
+		ipt:     ipt,
 	}
 }
 
@@ -113,6 +118,16 @@ func (n *Network) SetupNetwork(netnsPath, hostVeth, containerVeth, containerID, 
 	if err := n.netlink.LinkSetNsFd(containerIface, int(netns.Fd())); err != nil {
 		cleanupVeth()
 		return nil, err
+	}
+
+	if n.ipt != nil && bridgeName != "" && len(ipamConfig.Ranges) > 0 && len(ipamConfig.Ranges[0]) > 0 {
+		if subnet := ipamConfig.Ranges[0][0].Subnet; subnet != "" {
+			if err := n.ipt.AppendUnique("nat", "POSTROUTING", "-s", subnet, "!", "-o", bridgeName, "-j", "MASQUERADE"); err != nil {
+				logging.Logger.Error("masquerade_rule_failed", "subnet", subnet, "error", err.Error())
+			} else {
+				logging.Logger.Info("masquerade_rule_added", "subnet", subnet, "bridge", bridgeName)
+			}
+		}
 	}
 
 	ipam := ipam.NewIPAM(ipamConfig)
@@ -211,7 +226,7 @@ func (n *Network) CheckNetwork(netnsPath, hostVeth, containerVeth string, expect
 	})
 }
 
-func (n *Network) TeardownNetwork(hostVeth string, ipamConfig *config.IPAMConfig, containerID string) error {
+func (n *Network) TeardownNetwork(hostVeth, bridgeName string, ipamConfig *config.IPAMConfig, containerID string) error {
 	i := ipam.NewIPAM(ipamConfig)
 	if err := i.ReleaseAddr(containerID); err != nil {
 		logging.Logger.Error("ipam_release_failed",
@@ -225,7 +240,35 @@ func (n *Network) TeardownNetwork(hostVeth string, ipamConfig *config.IPAMConfig
 		return err
 	}
 
-	return n.netlink.LinkDel(link)
+	if err := n.netlink.LinkDel(link); err != nil {
+		return err
+	}
+
+	if n.ipt != nil && bridgeName != "" && len(ipamConfig.Ranges) > 0 && len(ipamConfig.Ranges[0]) > 0 {
+		if subnet := ipamConfig.Ranges[0][0].Subnet; subnet != "" {
+			if br, err := n.netlink.LinkByName(bridgeName); err == nil {
+				links, err := n.netlink.LinkList()
+				if err == nil {
+					hasPorts := false
+					for _, l := range links {
+						if l.Attrs().MasterIndex == br.Attrs().Index {
+							hasPorts = true
+							break
+						}
+					}
+					if !hasPorts {
+						if err := n.ipt.Delete("nat", "POSTROUTING", "-s", subnet, "!", "-o", bridgeName, "-j", "MASQUERADE"); err != nil {
+							logging.Logger.Error("masquerade_rule_delete_failed", "subnet", subnet, "error", err.Error())
+						} else {
+							logging.Logger.Info("masquerade_rule_deleted", "subnet", subnet, "bridge", bridgeName)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 func (n *Network) GarbageCollect(ipamConfig *config.IPAMConfig, validContainerIDs map[string]bool) error {

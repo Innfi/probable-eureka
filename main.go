@@ -82,6 +82,12 @@ func cmdAdd(args *skel.CmdArgs) error {
 
 func cmdDel(args *skel.CmdArgs) error {
 	start := time.Now()
+
+	conf := config.NetConf{}
+	if err := json.Unmarshal(args.StdinData, &conf); err != nil {
+		return fmt.Errorf("failed to parse config: %v", err)
+	}
+
 	hostVeth := hostVethName(args.ContainerID)
 
 	logging.Logger.Info("cmdDel",
@@ -90,7 +96,7 @@ func cmdDel(args *skel.CmdArgs) error {
 
 	n := network.New()
 
-	if err := n.TeardownNetwork(hostVeth); err != nil {
+	if err := n.TeardownNetwork(hostVeth, conf.Bridge, conf.IPAM, args.ContainerID); err != nil {
 		logging.Logger.Error("cni_command_failed",
 			"operation", "del",
 			"container_id", args.ContainerID,
