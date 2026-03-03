@@ -35,7 +35,7 @@
       "title": "Unit tests for pkg/network with mock interfaces",
       "description": "Add mock implementations of netlinkwrapper.NetLink and nswrapper.NS (using simple structs that record calls and return preset values). Write pkg/network/network_test.go covering: (1) SetupNetwork happy path returns an addr, (2) SetupNetwork rolls back veth if bridge attach fails, (3) TeardownNetwork calls LinkDel with correct name, (4) CheckNetwork returns error when host veth missing.",
       "acceptance": "go test ./pkg/network/... -v passes without root privileges.",
-      "status": "incomplete"
+      "status": "complete"
     },
     {
       "id": "integration-script",

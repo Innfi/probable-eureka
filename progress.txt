@@ -46,6 +46,15 @@
 - writeAllocations helper seeds allocations.json directly for tests that don't need BindNewAddr.
 - All 5 story acceptance cases pass without root (go test ./pkg/ipam/... -v).
 
+## unit-network
+- Added ipamIface interface (unexported) to network.go; Network.newIPAM field (func(*IPAMConfig) ipamIface) replaces all direct ipam.NewIPAM calls so IPAM is injectable in tests.
+- New() default sets newIPAM to a closure: `i := ipam.NewIPAM(cfg); return &i`.
+- mockNetLink stores links in a map; LinkAdd for *netlink.Veth also adds the PeerName link so both ends exist after creation.
+- mockNetNS.Do() runs callback synchronously (no kernel namespace switch); Fd() returns 0.
+- mockIPAM preset struct satisfies ipamIface; compile-time check via var _ ipamIface = (*mockIPAM)(nil).
+- TestMain calls logging.InitStderr() to avoid nil Logger panic.
+- All 4 acceptance tests pass without root: HappyPath, RollbackOnBridgeAttachFail, TeardownCallsLinkDel, CheckNetworkMissingHostVeth.
+
 ## network-default-route
 - Default route is installed inside netns.Do after LinkSetUp using n.netlink.RouteAdd.
 - Gateway parsed with net.ParseIP; net.ParseCIDR("0.0.0.0/0") or "::/0" used as Dst.
