@@ -60,3 +60,11 @@
 - Gateway parsed with net.ParseIP; net.ParseCIDR("0.0.0.0/0") or "::/0" used as Dst.
 - If Ranges is empty or Gateway is empty string, RouteAdd is skipped (no error).
 - gw.To4() == nil distinguishes IPv6 gateways to pick ::/0 as Dst.
+
+## integration-script
+- Script at scripts/integration-test.sh; invokes plugin binary directly (not cnitool) with CNI_COMMAND env vars.
+- Plugin is installed to /opt/cni/bin before test; CNI conflist written to /etc/cni/net.d/99-eureka-test.conflist.
+- ADD stdout is captured as JSON and validated with jq; CHECK config is built by jq-merging prevResult into the flat config.
+- Bridge eureka0 is NOT deleted by TeardownNetwork — cleanup must run `ip link del eureka0` explicitly.
+- Container ID must be ≥8 chars (first 8 used for host veth name prefix: veth<8 chars>).
+- After a successful DEL, set CNI_CONFIG="" so the cleanup trap skips a redundant best-effort DEL.

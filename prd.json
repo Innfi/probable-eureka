@@ -42,7 +42,7 @@
       "title": "Integration test shell script via cnitool",
       "description": "Create scripts/integration-test.sh. It should: build the binary with 'make build', install to /opt/cni/bin, create a test CNI config at /etc/cni/net.d/99-eureka-test.conflist, create a network namespace, invoke the plugin directly with CNI_COMMAND=ADD/CHECK/DEL env vars and validate the JSON result, then clean up. Requires root; skip gracefully if not root.",
       "acceptance": "scripts/integration-test.sh exits 0 on a machine with the build dependencies installed.",
-      "status": "incomplete"
+      "status": "complete"
     }
   ]
 }
