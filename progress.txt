@@ -1,0 +1,26 @@
+# Learnings and gotchas — append new findings, never delete old ones.
+# Each agent reads this before starting. Keep entries concise.
+
+## Architecture
+- IPAM uses file-based locking via syscall.Flock on <dataDir>/.lock; all reads/writes to
+  allocations.json must happen inside the locked section.
+- netlinkwrapper.NetLink and nswrapper.NS are interfaces — inject them via network.New() for
+  testability. pkg/ipam uses netlink directly (not through wrapper); this is intentional for now.
+- The veth pair is created with hostVeth as LinkAttrs.Name and containerVeth as PeerName.
+  The container-side peer exists at host level until LinkSetNsFd moves it into the netns.
+  Therefore LinkByName(containerVeth) must be called BEFORE netns.Do, not inside it.
+
+## Known gaps (as of project start)
+- TeardownNetwork (DEL path) only deletes the host veth — it does NOT release the IPAM
+  allocation. story ipam-release must be completed first so ReleaseAddr exists.
+- No default route is installed in the container netns after IP assignment. Containers cannot
+  reach the gateway until story network-default-route is done.
+- IPTablesIface only exposes read-only methods (List, ListChains, ChainExists). Append/Delete
+  are commented out. story iptables-masq must implement them before masquerade can be added.
+
+## Testing notes
+- Unit tests for pkg/ipam must set IPAMConfig.DataDir = t.TempDir() to avoid writing to
+  /var/lib/cni/networks and to allow running without root.
+- pkg/network tests need a mock NetLink that records LinkAdd/LinkDel calls; do NOT use the
+  real netlink calls in unit tests (they require root and modify kernel state).
+- Integration tests require root. Guard with: [ "$(id -u)" -eq 0 ] || { echo "skip: need root"; exit 0; }
