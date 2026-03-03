@@ -38,8 +38,18 @@ for i in $(seq 1 "$MAX_ITERATIONS"); do
   # Spawn a fresh Claude Code instance.
   # --print runs non-interactively; the agent reads CLAUDE.md, prd.json, progress.txt
   # and follows the instructions there.
+  # Exit code 3 = permission denied by user; exit the loop immediately.
   claude --print \
-    "You are working on the probable-eureka CNI plugin. Read CLAUDE.md and follow the instructions there exactly. The next incomplete story in prd.json is: $next_story"
+    "You are working on the probable-eureka CNI plugin. Read CLAUDE.md and follow the instructions there exactly. The next incomplete story in prd.json is: $next_story" \
+    || {
+      exit_code=$?
+      if [ "$exit_code" -eq 3 ]; then
+        echo "=== Permission error from Claude (exit code 3). Stopping loop. ==="
+        exit 3
+      fi
+      echo "=== Claude exited with code $exit_code. Stopping loop. ==="
+      exit "$exit_code"
+    }
 
   echo ""
   echo "--- Iteration $i complete ---"
