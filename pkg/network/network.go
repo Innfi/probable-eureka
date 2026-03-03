@@ -17,10 +17,19 @@ import (
 	"github.com/vishvananda/netlink"
 )
 
+// ipamIface is the subset of ipam.IPAM used by Network, enabling injection in tests.
+type ipamIface interface {
+	BindNewAddr(link netlink.Link, containerID string) (*netlink.Addr, error)
+	ReleaseAddr(containerID string) error
+	ReleaseStaleAllocations(validContainerIDs map[string]bool) ([]ipam.Allocation, error)
+	CheckStatus() error
+}
+
 type Network struct {
 	netlink netlinkwrapper.NetLink
 	ns      nswrapper.NS
 	ipt     iptableswrapper.IPTablesIface
+	newIPAM func(*config.IPAMConfig) ipamIface
 }
 
 func New() *Network {
@@ -29,6 +38,10 @@ func New() *Network {
 		netlink: netlinkwrapper.NewNetlink(),
 		ns:      nswrapper.NewNS(),
 		ipt:     ipt,
+		newIPAM: func(cfg *config.IPAMConfig) ipamIface {
+			i := ipam.NewIPAM(cfg)
+			return &i
+		},
 	}
 }
 
@@ -130,7 +143,7 @@ func (n *Network) SetupNetwork(netnsPath, hostVeth, containerVeth, containerID, 
 		}
 	}
 
-	ipam := ipam.NewIPAM(ipamConfig)
+	im := n.newIPAM(ipamConfig)
 	var addr *netlink.Addr
 
 	if err := netns.Do(func(_ ns.NetNS) error {
@@ -140,7 +153,7 @@ func (n *Network) SetupNetwork(netnsPath, hostVeth, containerVeth, containerID, 
 		}
 
 		// need testing: BindNewAddr has to be called in the goroutine?
-		addr, err = ipam.BindNewAddr(link, containerID)
+		addr, err = im.BindNewAddr(link, containerID)
 		if err != nil {
 			return err
 		}
@@ -227,8 +240,8 @@ func (n *Network) CheckNetwork(netnsPath, hostVeth, containerVeth string, expect
 }
 
 func (n *Network) TeardownNetwork(hostVeth, bridgeName string, ipamConfig *config.IPAMConfig, containerID string) error {
-	i := ipam.NewIPAM(ipamConfig)
-	if err := i.ReleaseAddr(containerID); err != nil {
+	im := n.newIPAM(ipamConfig)
+	if err := im.ReleaseAddr(containerID); err != nil {
 		logging.Logger.Error("ipam_release_failed",
 			"container_id", containerID,
 			"error", err.Error(),
@@ -307,8 +320,8 @@ func (n *Network) GarbageCollect(ipamConfig *config.IPAMConfig, validContainerID
 	}
 
 	// Clean up stale IP allocations
-	i := ipam.NewIPAM(ipamConfig)
-	released, err := i.ReleaseStaleAllocations(validContainerIDs)
+	im := n.newIPAM(ipamConfig)
+	released, err := im.ReleaseStaleAllocations(validContainerIDs)
 	if err != nil {
 		return fmt.Errorf("failed to release stale allocations: %v", err)
 	}
@@ -324,6 +337,5 @@ func (n *Network) GarbageCollect(ipamConfig *config.IPAMConfig, validContainerID
 }
 
 func (n *Network) CheckPluginStatus(ipamConfig *config.IPAMConfig) error {
-	i := ipam.NewIPAM(ipamConfig)
-	return i.CheckStatus()
+	return n.newIPAM(ipamConfig).CheckStatus()
 }
