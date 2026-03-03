@@ -7,14 +7,14 @@
       "title": "IPAM: release IP allocation on DEL",
       "description": "Add ReleaseAddr(containerID string) error to pkg/ipam/ipam.go that removes the matching entry from allocations.json. Wire it into network.TeardownNetwork so DEL actually frees the IP. Currently TeardownNetwork only deletes the host veth, leaving a stale allocation in the store.",
       "acceptance": "go test ./pkg/ipam/... passes; calling BindNewAddr then ReleaseAddr then BindNewAddr again reuses the same IP.",
-      "status": "incomplete"
+      "status": "complete"
     },
     {
       "id": "network-default-route",
       "title": "Add default route inside container netns",
       "description": "In network.SetupNetwork, after BindNewAddr succeeds inside the netns.Do block, call netlink.RouteAdd to install a default route via the gateway IP from ipamConfig.Ranges[0][0].Gateway. If no gateway is configured, skip. Use the netlinkwrapper interface (n.netlink) so it is mockable.",
       "acceptance": "make vet && make build pass; manual test shows 'ip route' inside container netns has a default route.",
-      "status": "incomplete"
+      "status": "complete"
     },
     {
       "id": "iptables-masq",

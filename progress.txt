@@ -24,3 +24,13 @@
 - pkg/network tests need a mock NetLink that records LinkAdd/LinkDel calls; do NOT use the
   real netlink calls in unit tests (they require root and modify kernel state).
 - Integration tests require root. Guard with: [ "$(id -u)" -eq 0 ] || { echo "skip: need root"; exit 0; }
+- pkg/ipam tests require logging.InitStderr() before any code that calls logging.Logger; add
+  a TestMain that calls logging.InitStderr() and os.Exit(m.Run()) to avoid nil-pointer panics.
+- pkg/iptableswrapper TestInit requires root (iptables syscall); guard with
+  if os.Getuid() != 0 { t.Skip(...) } to keep go test ./... green without root.
+
+## network-default-route
+- Default route is installed inside netns.Do after LinkSetUp using n.netlink.RouteAdd.
+- Gateway parsed with net.ParseIP; net.ParseCIDR("0.0.0.0/0") or "::/0" used as Dst.
+- If Ranges is empty or Gateway is empty string, RouteAdd is skipped (no error).
+- gw.To4() == nil distinguishes IPv6 gateways to pick ::/0 as Dst.

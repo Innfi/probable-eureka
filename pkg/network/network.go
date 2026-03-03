@@ -134,6 +134,27 @@ func (n *Network) SetupNetwork(netnsPath, hostVeth, containerVeth, containerID, 
 			return err
 		}
 
+		if len(ipamConfig.Ranges) > 0 && len(ipamConfig.Ranges[0]) > 0 {
+			if gwStr := ipamConfig.Ranges[0][0].Gateway; gwStr != "" {
+				gw := net.ParseIP(gwStr)
+				if gw != nil {
+					_, defaultDst, _ := net.ParseCIDR("0.0.0.0/0")
+					if gw.To4() == nil {
+						_, defaultDst, _ = net.ParseCIDR("::/0")
+					}
+					route := &netlink.Route{
+						LinkIndex: link.Attrs().Index,
+						Dst:       defaultDst,
+						Gw:        gw,
+					}
+					if err := n.netlink.RouteAdd(route); err != nil {
+						return fmt.Errorf("failed to add default route via %s: %w", gw, err)
+					}
+					logging.Logger.Info("default_route_added", "gateway", gw)
+				}
+			}
+		}
+
 		return nil
 	}); err != nil {
 		cleanupVeth()
@@ -190,7 +211,15 @@ func (n *Network) CheckNetwork(netnsPath, hostVeth, containerVeth string, expect
 	})
 }
 
-func (n *Network) TeardownNetwork(hostVeth string) error {
+func (n *Network) TeardownNetwork(hostVeth string, ipamConfig *config.IPAMConfig, containerID string) error {
+	i := ipam.NewIPAM(ipamConfig)
+	if err := i.ReleaseAddr(containerID); err != nil {
+		logging.Logger.Error("ipam_release_failed",
+			"container_id", containerID,
+			"error", err.Error(),
+		)
+	}
+
 	link, err := n.netlink.LinkByName(hostVeth)
 	if err != nil {
 		return err
