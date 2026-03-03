@@ -29,6 +29,23 @@
 - pkg/iptableswrapper TestInit requires root (iptables syscall); guard with
   if os.Getuid() != 0 { t.Skip(...) } to keep go test ./... green without root.
 
+## iptables-masq
+- IPTablesIface now has Exists/Append/AppendUnique/Delete; all delegating to go-iptables.
+- Network.ipt is nil if NewIPTables fails (non-root); all iptables calls guarded by `if n.ipt != nil`.
+- MASQUERADE rule: `-s <subnet> ! -o <bridge> -j MASQUERADE` in nat/POSTROUTING via AppendUnique.
+- TeardownNetwork signature changed: added bridgeName string (second param); main.go passes conf.Bridge.
+- Masquerade rule deleted in TeardownNetwork only when bridge has zero remaining MasterIndex ports.
+- mockIPTables in iptables_test.go satisfies IPTablesIface (compile-time check via var _ IPTablesIface = (*mockIPTables)(nil)).
+
+## unit-ipam
+- Added `netlinkAdd func(link netlink.Link, addr *netlink.Addr) error` field to IPAM struct so
+  BindNewAddr is testable without root; NewIPAM sets it to netlink.AddrAdd; tests inject noopAddrAdd.
+- Test file extended (pkg/ipam/ipam_test.go) with table-driven TestBindNewAddr (allocates in range,
+  two differ, reuse after release), TestReleaseStaleAllocations (invalid removed, valid kept),
+  TestCheckStatus (error on no ranges, nil on valid range).
+- writeAllocations helper seeds allocations.json directly for tests that don't need BindNewAddr.
+- All 5 story acceptance cases pass without root (go test ./pkg/ipam/... -v).
+
 ## network-default-route
 - Default route is installed inside netns.Do after LinkSetUp using n.netlink.RouteAdd.
 - Gateway parsed with net.ParseIP; net.ParseCIDR("0.0.0.0/0") or "::/0" used as Dst.

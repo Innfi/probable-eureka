@@ -30,11 +30,12 @@ type AllocationStore struct {
 }
 
 type IPAM struct {
-	config *config.IPAMConfig
+	config     *config.IPAMConfig
+	netlinkAdd func(link netlink.Link, addr *netlink.Addr) error
 }
 
 func NewIPAM(config *config.IPAMConfig) IPAM {
-	return IPAM{config: config}
+	return IPAM{config: config, netlinkAdd: netlink.AddrAdd}
 }
 
 func (ipam *IPAM) BindNewAddr(link netlink.Link, containerID string) (*netlink.Addr, error) {
@@ -49,7 +50,7 @@ func (ipam *IPAM) BindNewAddr(link netlink.Link, containerID string) (*netlink.A
 		return nil, err
 	}
 
-	if err := netlink.AddrAdd(link, addr); err != nil {
+	if err := ipam.netlinkAdd(link, addr); err != nil {
 		return nil, err
 	}
 
@@ -203,6 +204,47 @@ func (ipam *IPAM) findAvailableIP(start, end net.IP) net.IP {
 		if !allocatedIPs[ip.String()] {
 			return ip
 		}
+	}
+
+	return nil
+}
+
+func (ipam *IPAM) ReleaseAddr(containerID string) error {
+	unlock, err := ipam.acquireLock()
+	if err != nil {
+		return fmt.Errorf("failed to acquire lock: %w", err)
+	}
+	defer unlock()
+
+	store, err := ipam.loadAllocations()
+	if err != nil {
+		return err
+	}
+
+	var kept []Allocation
+	for _, alloc := range store.Allocations {
+		if alloc.ContainerID == containerID {
+			logging.Logger.Info("ip_released",
+				"ip", alloc.IP,
+				"container_id", containerID,
+			)
+		} else {
+			kept = append(kept, alloc)
+		}
+	}
+
+	if kept == nil {
+		kept = []Allocation{}
+	}
+
+	data, err := json.MarshalIndent(&AllocationStore{Allocations: kept}, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal allocations: %w", err)
+	}
+
+	allocPath := filepath.Join(ipam.dataDir(), allocationsFile)
+	if err := os.WriteFile(allocPath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write allocations file: %w", err)
 	}
 
 	return nil

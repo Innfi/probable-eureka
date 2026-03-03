@@ -21,14 +21,14 @@
       "title": "Expand iptableswrapper and add masquerade rule",
       "description": "Uncomment and implement the Append/AppendUnique/Exists/Delete methods on IPTablesIface in pkg/iptableswrapper/iptables.go. Then in network.SetupNetwork, after veth setup, call AppendUnique on the POSTROUTING chain in the nat table with a MASQUERADE rule for the pod subnet. Add a corresponding delete in TeardownNetwork only if the bridge has no remaining ports.",
       "acceptance": "make vet && make build pass; iptableswrapper unit test covers Append/Exists/Delete via a mock.",
-      "status": "incomplete"
+      "status": "complete"
     },
     {
       "id": "unit-ipam",
       "title": "Unit tests for pkg/ipam",
       "description": "Write pkg/ipam/ipam_test.go with table-driven tests. Set IPAMConfig.DataDir to t.TempDir() to avoid filesystem side effects. Cover: (1) BindNewAddr allocates an IP in range, (2) two allocations get different IPs, (3) ReleaseAddr frees the IP and a third BindNewAddr reuses it, (4) ReleaseStaleAllocations removes only invalid container IDs, (5) CheckStatus returns error when no ranges configured.",
       "acceptance": "go test ./pkg/ipam/... -v passes without root privileges.",
-      "status": "incomplete"
+      "status": "complete"
     },
     {
       "id": "unit-network",
