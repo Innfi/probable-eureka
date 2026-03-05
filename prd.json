@@ -44,5 +44,34 @@
       "acceptance": "scripts/integration-test.sh exits 0 on a machine with the build dependencies installed.",
       "status": "complete"
     }
+    ,
+    {
+      "id": "deploy-dockerfile",
+      "title": "Multi-stage Dockerfile for CNI installer image",
+      "description": "Create a Dockerfile at the repo root using a two-stage build. Stage 1 (builder): golang:1.22-alpine, copy source, run 'go build -o probable-eureka .'. Stage 2 (installer): use a minimal base (e.g. alpine:3.19), copy only the binary. The image's default CMD should be 'cp /probable-eureka /opt/cni/bin/probable-eureka' so it can be used as a DaemonSet init container. Add a 'make image' target to the Makefile that runs 'docker build -t probable-eureka:latest .'.",
+      "acceptance": "make image exits 0; docker run --rm -v /tmp/cni-test:/opt/cni/bin probable-eureka:latest && ls /tmp/cni-test/probable-eureka succeeds.",
+      "status": "incomplete"
+    },
+    {
+      "id": "deploy-conflist",
+      "title": "Production CNI conflist template",
+      "description": "Create deployments/10-eureka.conflist with a valid CNI 1.0.0 conflist that references the probable-eureka plugin. Include sensible production defaults: name 'eureka', bridge 'cni0', dataDir '/var/lib/cni/eureka', subnet '10.244.0.0/16', gateway '10.244.0.1', mtu 1500. Add comments (via a companion deployments/10-eureka.conflist.example) explaining each field. The conflist must pass 'jq . deployments/10-eureka.conflist' (valid JSON).",
+      "acceptance": "jq . deployments/10-eureka.conflist exits 0; the plugin name field matches the binary name 'probable-eureka'.",
+      "status": "incomplete"
+    },
+    {
+      "id": "deploy-daemonset",
+      "title": "Kubernetes DaemonSet manifest for node installation",
+      "description": "Create deployments/daemonset.yaml. The DaemonSet should: (1) run on every node via a nodeSelector or tolerations for all taints, (2) use an initContainer with image probable-eureka:latest that copies the binary to /opt/cni/bin via a hostPath volume mount, (3) use a second initContainer (busybox or alpine) that writes the CNI conflist from a ConfigMap to /etc/cni/net.d/10-eureka.conflist, (4) include a pause main container so the Pod stays Running after init. Create deployments/configmap.yaml holding the conflist content from deploy-conflist. Both manifests must pass 'kubectl apply --dry-run=client -f deployments/'.",
+      "acceptance": "kubectl apply --dry-run=client -f deployments/ exits 0 against any reachable cluster or with --validate=false on a machine without a cluster.",
+      "status": "incomplete"
+    },
+    {
+      "id": "deploy-makefile-targets",
+      "title": "Add install and uninstall Makefile targets for direct node deployment",
+      "description": "Add the following targets to the Makefile: (1) 'install': requires root, copies the built binary to /opt/cni/bin/probable-eureka (mode 0755), copies deployments/10-eureka.conflist to /etc/cni/net.d/10-eureka.conflist; (2) 'uninstall': removes both files; (3) update the existing 'help' target (or add one) that lists all targets with one-line descriptions. Guard install/uninstall with a root check: '[ $$(id -u) -eq 0 ] || (echo \"install requires root\"; exit 1)'.",
+      "acceptance": "make install (run as root) places files at the correct paths; make uninstall removes them; make help lists install and uninstall.",
+      "status": "incomplete"
+    }
   ]
 }
