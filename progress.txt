@@ -80,3 +80,10 @@
 - Bridge eureka0 is NOT deleted by TeardownNetwork — cleanup must run `ip link del eureka0` explicitly.
 - Container ID must be ≥8 chars (first 8 used for host veth name prefix: veth<8 chars>).
 - After a successful DEL, set CNI_CONFIG="" so the cleanup trap skips a redundant best-effort DEL.
+
+## deploy-daemonset
+- kubectl apply --dry-run=client requires a reachable API server even with --validate=false in kubectl v1.34+; spin up `kind create cluster` for offline validation.
+- DaemonSet uses tolerations: [{operator: Exists}] (no key/effect) to tolerate all taints and run on every node.
+- Two initContainers: (1) probable-eureka:latest copies binary to /opt/cni/bin via hostPath; (2) busybox writes conflist from ConfigMap volume to /etc/cni/net.d.
+- Main container is registry.k8s.io/pause:3.9 to keep Pod Running after init.
+- ConfigMap (eureka-cni-config) in kube-system holds the conflist under key 10-eureka.conflist.

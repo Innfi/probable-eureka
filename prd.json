@@ -64,7 +64,7 @@
       "title": "Kubernetes DaemonSet manifest for node installation",
       "description": "Create deployments/daemonset.yaml. The DaemonSet should: (1) run on every node via a nodeSelector or tolerations for all taints, (2) use an initContainer with image probable-eureka:latest that copies the binary to /opt/cni/bin via a hostPath volume mount, (3) use a second initContainer (busybox or alpine) that writes the CNI conflist from a ConfigMap to /etc/cni/net.d/10-eureka.conflist, (4) include a pause main container so the Pod stays Running after init. Create deployments/configmap.yaml holding the conflist content from deploy-conflist. Both manifests must pass 'kubectl apply --dry-run=client -f deployments/'.",
       "acceptance": "kubectl apply --dry-run=client -f deployments/ exits 0 against any reachable cluster or with --validate=false on a machine without a cluster.",
-      "status": "incomplete"
+      "status": "complete"
     },
     {
       "id": "deploy-makefile-targets",
