@@ -8,7 +8,7 @@ LDFLAGS := -s -w
 CNI_BIN_DIR := /opt/cni/bin
 CNI_CONF_DIR := /etc/cni/net.d
 
-.PHONY: all build clean test vet fmt lint tidy install uninstall
+.PHONY: all build clean test vet fmt lint tidy install uninstall image
 
 all: fmt vet build
 
@@ -50,3 +50,6 @@ install: build
 
 uninstall:
 	rm -f $(CNI_BIN_DIR)/$(BINARY_NAME)
+
+image:
+	docker build -t $(BINARY_NAME):latest .
