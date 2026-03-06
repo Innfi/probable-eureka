@@ -67,6 +67,12 @@
 - CMD uses exec form: ["cp", "/probable-eureka", "/opt/cni/bin/probable-eureka"].
 - 'make image' target added to Makefile; uses BINARY_NAME variable so it stays in sync.
 
+## deploy-conflist
+- deployments/10-eureka.conflist is pure JSON (no comments); companion .example file holds the annotated version.
+- CNI conflist uses cniVersion 1.0.0, name "eureka", plugin type "probable-eureka".
+- IPAM ranges structure is outer array (per address family) wrapping inner array (pooled subnets).
+- Bridge address (gateway IP) is NOT assigned by the plugin; must be set out-of-band on the node.
+
 ## integration-script
 - Script at scripts/integration-test.sh; invokes plugin binary directly (not cnitool) with CNI_COMMAND env vars.
 - Plugin is installed to /opt/cni/bin before test; CNI conflist written to /etc/cni/net.d/99-eureka-test.conflist.

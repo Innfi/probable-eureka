@@ -57,7 +57,7 @@
       "title": "Production CNI conflist template",
       "description": "Create deployments/10-eureka.conflist with a valid CNI 1.0.0 conflist that references the probable-eureka plugin. Include sensible production defaults: name 'eureka', bridge 'cni0', dataDir '/var/lib/cni/eureka', subnet '10.244.0.0/16', gateway '10.244.0.1', mtu 1500. Add comments (via a companion deployments/10-eureka.conflist.example) explaining each field. The conflist must pass 'jq . deployments/10-eureka.conflist' (valid JSON).",
       "acceptance": "jq . deployments/10-eureka.conflist exits 0; the plugin name field matches the binary name 'probable-eureka'.",
-      "status": "incomplete"
+      "status": "complete"
     },
     {
       "id": "deploy-daemonset",
