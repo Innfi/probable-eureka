@@ -71,7 +71,7 @@
       "title": "Add install and uninstall Makefile targets for direct node deployment",
       "description": "Add the following targets to the Makefile: (1) 'install': requires root, copies the built binary to /opt/cni/bin/probable-eureka (mode 0755), copies deployments/10-eureka.conflist to /etc/cni/net.d/10-eureka.conflist; (2) 'uninstall': removes both files; (3) update the existing 'help' target (or add one) that lists all targets with one-line descriptions. Guard install/uninstall with a root check: '[ $$(id -u) -eq 0 ] || (echo \"install requires root\"; exit 1)'.",
       "acceptance": "make install (run as root) places files at the correct paths; make uninstall removes them; make help lists install and uninstall.",
-      "status": "incomplete"
+      "status": "complete"
     }
   ]
 }
