@@ -50,7 +50,7 @@
       "title": "Multi-stage Dockerfile for CNI installer image",
       "description": "Create a Dockerfile at the repo root using a two-stage build. Stage 1 (builder): golang:1.22-alpine, copy source, run 'go build -o probable-eureka .'. Stage 2 (installer): use a minimal base (e.g. alpine:3.19), copy only the binary. The image's default CMD should be 'cp /probable-eureka /opt/cni/bin/probable-eureka' so it can be used as a DaemonSet init container. Add a 'make image' target to the Makefile that runs 'docker build -t probable-eureka:latest .'.",
       "acceptance": "make image exits 0; docker run --rm -v /tmp/cni-test:/opt/cni/bin probable-eureka:latest && ls /tmp/cni-test/probable-eureka succeeds.",
-      "status": "incomplete"
+      "status": "complete"
     },
     {
       "id": "deploy-conflist",

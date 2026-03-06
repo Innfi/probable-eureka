@@ -61,6 +61,12 @@
 - If Ranges is empty or Gateway is empty string, RouteAdd is skipped (no error).
 - gw.To4() == nil distinguishes IPv6 gateways to pick ::/0 as Dst.
 
+## deploy-dockerfile
+- Two-stage Dockerfile: golang:1.22-alpine builder, alpine:3.19 installer.
+- go.mod says "go 1.25.5" which is newer than golang:1.22; if docker build fails due to version mismatch, switch builder image to a newer golang image.
+- CMD uses exec form: ["cp", "/probable-eureka", "/opt/cni/bin/probable-eureka"].
+- 'make image' target added to Makefile; uses BINARY_NAME variable so it stays in sync.
+
 ## integration-script
 - Script at scripts/integration-test.sh; invokes plugin binary directly (not cnitool) with CNI_COMMAND env vars.
 - Plugin is installed to /opt/cni/bin before test; CNI conflist written to /etc/cni/net.d/99-eureka-test.conflist.
