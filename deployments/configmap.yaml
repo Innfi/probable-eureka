@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: eureka-cni-config
+  namespace: kube-system
+data:
+  10-eureka.conflist: |
+    {
+      "cniVersion": "1.0.0",
+      "name": "eureka",
+      "plugins": [
+        {
+          "type": "probable-eureka",
+          "bridge": "cni0",
+          "mtu": 1500,
+          "ipam": {
+            "dataDir": "/var/lib/cni/eureka",
+            "ranges": [
+              [
+                {
+                  "subnet": "10.244.0.0/16",
+                  "gateway": "10.244.0.1"
+                }
+              ]
+            ]
+          }
+        }
+      ]
+    }

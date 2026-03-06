@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: eureka-cni-installer
+  namespace: kube-system
+  labels:
+    app: eureka-cni-installer
+spec:
+  selector:
+    matchLabels:
+      app: eureka-cni-installer
+  template:
+    metadata:
+      labels:
+        app: eureka-cni-installer
+    spec:
+      hostNetwork: true
+      tolerations:
+        - operator: Exists
+      initContainers:
+        - name: install-cni-binary
+          image: probable-eureka:latest
+          imagePullPolicy: IfNotPresent
+          command: ["cp", "/probable-eureka", "/opt/cni/bin/probable-eureka"]
+          volumeMounts:
+            - name: cni-bin-dir
+              mountPath: /opt/cni/bin
+        - name: install-cni-config
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              cp /etc/eureka-config/10-eureka.conflist /etc/cni/net.d/10-eureka.conflist
+          volumeMounts:
+            - name: cni-net-dir
+              mountPath: /etc/cni/net.d
+            - name: eureka-config
+              mountPath: /etc/eureka-config
+      containers:
+        - name: pause
+          image: registry.k8s.io/pause:3.9
+          resources:
+            requests:
+              cpu: 10m
+              memory: 10Mi
+      volumes:
+        - name: cni-bin-dir
+          hostPath:
+            path: /opt/cni/bin
+            type: DirectoryOrCreate
+        - name: cni-net-dir
+          hostPath:
+            path: /etc/cni/net.d
+            type: DirectoryOrCreate
+        - name: eureka-config
+          configMap:
+            name: eureka-cni-config
