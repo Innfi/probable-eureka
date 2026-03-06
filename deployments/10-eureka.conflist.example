@@ -1,0 +1,67 @@
+# CNI conflist for probable-eureka — annotated example
+#
+# Copy this file to /etc/cni/net.d/10-eureka.conflist (strip the comments
+# first — pure JSON is required at runtime).
+#
+# Field reference:
+#
+#   cniVersion  — CNI spec version. probable-eureka implements 1.0.0.
+#
+#   name        — Logical network name.  Must be unique on the node.
+#                 Shown in 'kubectl describe pod' under 'Network'.
+#
+#   plugins[]   — Ordered list of plugin invocations.
+#
+#     type      — Binary name that kubelet looks up in /opt/cni/bin/.
+#                 Must match the installed binary: "probable-eureka".
+#
+#     bridge    — Linux bridge created on the host to attach pod veths.
+#                 Default: "cni0".  Change if another CNI plugin already
+#                 owns "cni0" on the same node.
+#
+#     mtu       — MTU set on the veth pair and bridge. 1500 is safe for
+#                 most environments.  Set to 1450 if VXLAN/Geneve
+#                 encapsulation is used on the underlying network.
+#
+#     ipam      — Embedded IPAM configuration block.
+#
+#       dataDir — Where allocations.json is stored on the host.
+#                 Must be writable by the process running the CNI plugin
+#                 (typically root).  Each network should use a unique
+#                 subdirectory to avoid key collisions.
+#
+#       ranges  — Outer array: one entry per address family (IPv4, IPv6).
+#                 Inner array: one or more subnets pooled together.
+#
+#         subnet  — CIDR block to allocate pod IPs from.
+#                   "10.244.0.0/16" provides ~65 k addresses; for large
+#                   clusters use a /14 or allocate per-node sub-ranges.
+#
+#         gateway — IP of the default gateway installed in each pod netns.
+#                   Typically the bridge IP (.1 of the subnet).  The
+#                   bridge must be assigned this address by an out-of-band
+#                   mechanism (e.g. network-manager, systemd-networkd, or
+#                   a node-setup DaemonSet) — probable-eureka does not
+#                   assign the bridge address itself.
+{
+  "cniVersion": "1.0.0",
+  "name": "eureka",
+  "plugins": [
+    {
+      "type": "probable-eureka",
+      "bridge": "cni0",
+      "mtu": 1500,
+      "ipam": {
+        "dataDir": "/var/lib/cni/eureka",
+        "ranges": [
+          [
+            {
+              "subnet": "10.244.0.0/16",
+              "gateway": "10.244.0.1"
+            }
+          ]
+        ]
+      }
+    }
+  ]
+}
