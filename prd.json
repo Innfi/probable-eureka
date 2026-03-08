@@ -71,14 +71,14 @@
       "title": "Pluggable IPAM persistence: file and etcd backends",
       "description": "Extract IPAM persistence into a Store interface with three methods: Lock() (func(), error), Load() (*AllocationStore, error), Save(*AllocationStore) error. Create pkg/ipam/store.go (interface + NewStore factory), pkg/ipam/store_file.go (current file logic moved here), and pkg/ipam/store_etcd.go (etcd backend using go.etcd.io/etcd/client/v3 with concurrency.Mutex for distributed locking and range queries for Load). Add Backend string and EtcdEndpoints []string fields to pkg/config/config.go IPAMConfig. NewStore selects the backend based on cfg.Backend ('file' default, 'etcd'). Replace direct file calls in IPAM methods with ipam.store calls. For tests, inject a mock Store directly (same pattern as netlinkwrapper).",
       "acceptance": "make vet && make test && make build pass; go test ./pkg/ipam/... covers FileStore and a mock-based Store test; NewIPAM with Backend='file' behaves identically to current behaviour.",
-      "status": "incomplete"
+      "status": "complete"
     },
     {
       "id": "metrics-prometheus",
       "title": "Prometheus metrics endpoint for CNI operations",
       "description": "Add a pkg/metrics/metrics.go package that registers Prometheus counters and histograms for CNI operations: (1) cni_operations_total (counter vec, labels: command=[ADD,DEL,CHECK,GC], status=[success,error]), (2) cni_operation_duration_seconds (histogram vec, same labels). Expose a StartMetricsServer(addr string) func that runs an HTTP server with /metrics via promhttp. Wire the metrics into main.go: increment/observe in the cmdAdd, cmdDel, cmdCheck, cmdGC handlers wrapping each call to network.*. Add a MetricsAddr string field (e.g. ':9100') to pkg/config/config.go NetConf; if empty, skip starting the server. Use github.com/prometheus/client_golang as the dependency.",
       "acceptance": "make vet && make test && make build pass; go test ./pkg/metrics/... covers counter increment and histogram observe with a test registry; curl localhost:9100/metrics shows cni_operations_total after a manual ADD invocation.",
-      "status": "incomplete"
+      "status": "complete"
     },
     {
       "id": "deploy-makefile-targets",

@@ -3,22 +3,39 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/innfi/probable-eureka/pkg/config"
 	"github.com/innfi/probable-eureka/pkg/logging"
+	"github.com/innfi/probable-eureka/pkg/metrics"
 	"github.com/innfi/probable-eureka/pkg/network"
 
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
 	current "github.com/containernetworking/cni/pkg/types/100"
 	"github.com/containernetworking/cni/pkg/version"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 const (
 	vethPrefix           = "veth"
 	containerIDPrefixLen = 8
 )
+
+var (
+	globalMetrics *metrics.Metrics
+	metricsOnce   sync.Once
+)
+
+func initMetrics(addr string) {
+	metricsOnce.Do(func() {
+		globalMetrics = metrics.NewMetrics(prometheus.DefaultRegisterer)
+		if addr != "" {
+			metrics.StartMetricsServer(addr, prometheus.DefaultGatherer)
+		}
+	})
+}
 
 func hostVethName(containerID string) string {
 	return vethPrefix + containerID[:containerIDPrefixLen]
@@ -37,11 +54,21 @@ func cmdAdd(args *skel.CmdArgs) error {
 		return fmt.Errorf("failed to parse config: %v", err)
 	}
 
+	initMetrics(conf.MetricsAddr)
+
 	hostVeth := hostVethName(args.ContainerID)
 	containerVeth := args.IfName
 
 	n := network.New()
 	addr, err := n.SetupNetwork(args.Netns, hostVeth, containerVeth, args.ContainerID, conf.Bridge, conf.IPAM)
+
+	status := "success"
+	if err != nil {
+		status = "error"
+	}
+	globalMetrics.OpsTotal.WithLabelValues("ADD", status).Inc()
+	globalMetrics.OpsDuration.WithLabelValues("ADD", status).Observe(time.Since(start).Seconds())
+
 	if err != nil {
 		logging.Logger.Error("cni_command_failed",
 			"operation", "add",
@@ -88,6 +115,8 @@ func cmdDel(args *skel.CmdArgs) error {
 		return fmt.Errorf("failed to parse config: %v", err)
 	}
 
+	initMetrics(conf.MetricsAddr)
+
 	hostVeth := hostVethName(args.ContainerID)
 
 	logging.Logger.Info("cmdDel",
@@ -95,8 +124,16 @@ func cmdDel(args *skel.CmdArgs) error {
 	)
 
 	n := network.New()
+	err := n.TeardownNetwork(hostVeth, conf.Bridge, conf.IPAM, args.ContainerID)
 
-	if err := n.TeardownNetwork(hostVeth, conf.Bridge, conf.IPAM, args.ContainerID); err != nil {
+	status := "success"
+	if err != nil {
+		status = "error"
+	}
+	globalMetrics.OpsTotal.WithLabelValues("DEL", status).Inc()
+	globalMetrics.OpsDuration.WithLabelValues("DEL", status).Observe(time.Since(start).Seconds())
+
+	if err != nil {
 		logging.Logger.Error("cni_command_failed",
 			"operation", "del",
 			"container_id", args.ContainerID,
@@ -123,6 +160,8 @@ func cmdCheck(args *skel.CmdArgs) error {
 		return fmt.Errorf("failed to parse config: %v", err)
 	}
 
+	initMetrics(conf.MetricsAddr)
+
 	if conf.PrevResult == nil {
 		return fmt.Errorf("missing prevResult from runtime")
 	}
@@ -135,7 +174,16 @@ func cmdCheck(args *skel.CmdArgs) error {
 	hostVeth := hostVethName(args.ContainerID)
 	n := network.New()
 
-	if err := n.CheckNetwork(args.Netns, hostVeth, args.IfName, prevResult.IPs); err != nil {
+	err = n.CheckNetwork(args.Netns, hostVeth, args.IfName, prevResult.IPs)
+
+	status := "success"
+	if err != nil {
+		status = "error"
+	}
+	globalMetrics.OpsTotal.WithLabelValues("CHECK", status).Inc()
+	globalMetrics.OpsDuration.WithLabelValues("CHECK", status).Observe(time.Since(start).Seconds())
+
+	if err != nil {
 		logging.Logger.Error("cni_command_failed",
 			"operation", "check",
 			"container_id", args.ContainerID,
@@ -186,13 +234,24 @@ func cmdGC(args *skel.CmdArgs) error {
 		return fmt.Errorf("failed to parse config: %v", err)
 	}
 
+	initMetrics(conf.MetricsAddr)
+
 	validContainerIDs := make(map[string]bool)
 	for _, attachment := range conf.ValidAttachments {
 		validContainerIDs[attachment.ContainerID] = true
 	}
 
 	n := network.New()
-	if err := n.GarbageCollect(conf.IPAM, validContainerIDs); err != nil {
+	err := n.GarbageCollect(conf.IPAM, validContainerIDs)
+
+	status := "success"
+	if err != nil {
+		status = "error"
+	}
+	globalMetrics.OpsTotal.WithLabelValues("GC", status).Inc()
+	globalMetrics.OpsDuration.WithLabelValues("GC", status).Observe(time.Since(start).Seconds())
+
+	if err != nil {
 		logging.Logger.Error("cni_command_failed",
 			"operation", "gc",
 			"duration_ms", time.Since(start).Milliseconds(),
