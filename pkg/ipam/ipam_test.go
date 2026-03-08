@@ -41,7 +41,8 @@ func makeIPAM(t *testing.T) *IPAM {
 			},
 		},
 	}
-	i := NewIPAM(cfg)
+	i, err := NewIPAM(cfg)
+	require.NoError(t, err)
 	i.netlinkAdd = noopAddrAdd
 	return &i
 }
@@ -56,26 +57,26 @@ func writeAllocations(t *testing.T, dir string, allocs []Allocation) {
 
 func TestReleaseAddr_RemovesAllocation(t *testing.T) {
 	i := makeIPAM(t)
-	writeAllocations(t, i.dataDir(), []Allocation{
+	writeAllocations(t, i.config.DataDir, []Allocation{
 		{IP: "10.0.0.2", ContainerID: "container-1"},
 	})
 
 	require.NoError(t, i.ReleaseAddr("container-1"))
 
-	store, err := i.loadAllocations()
+	store, err := i.store.Load()
 	require.NoError(t, err)
 	require.Empty(t, store.Allocations)
 }
 
 func TestReleaseAddr_UnknownContainerIDIsNoop(t *testing.T) {
 	i := makeIPAM(t)
-	writeAllocations(t, i.dataDir(), []Allocation{
+	writeAllocations(t, i.config.DataDir, []Allocation{
 		{IP: "10.0.0.2", ContainerID: "container-1"},
 	})
 
 	require.NoError(t, i.ReleaseAddr("container-unknown"))
 
-	store, err := i.loadAllocations()
+	store, err := i.store.Load()
 	require.NoError(t, err)
 	require.Len(t, store.Allocations, 1)
 	require.Equal(t, "container-1", store.Allocations[0].ContainerID)
@@ -83,7 +84,7 @@ func TestReleaseAddr_UnknownContainerIDIsNoop(t *testing.T) {
 
 func TestReleaseAddr_IPReuse(t *testing.T) {
 	i := makeIPAM(t)
-	writeAllocations(t, i.dataDir(), []Allocation{
+	writeAllocations(t, i.config.DataDir, []Allocation{
 		{IP: "10.0.0.2", ContainerID: "container-1"},
 	})
 
@@ -179,7 +180,7 @@ func TestReleaseStaleAllocations(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			i := makeIPAM(t)
-			writeAllocations(t, i.dataDir(), tc.initial)
+			writeAllocations(t, i.config.DataDir, tc.initial)
 
 			released, err := i.ReleaseStaleAllocations(tc.validIDs)
 			require.NoError(t, err)
@@ -190,7 +191,7 @@ func TestReleaseStaleAllocations(t *testing.T) {
 			}
 			assert.Equal(t, tc.wantReleased, releasedIDs)
 
-			store, err := i.loadAllocations()
+			store, err := i.store.Load()
 			require.NoError(t, err)
 			var keptIDs []string
 			for _, a := range store.Allocations {
@@ -222,12 +223,13 @@ func TestCheckStatus(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			i := NewIPAM(&config.IPAMConfig{
+			i, err := NewIPAM(&config.IPAMConfig{
 				DataDir: t.TempDir(),
 				Ranges:  tc.ranges,
 			})
+			require.NoError(t, err)
 			i.netlinkAdd = noopAddrAdd
-			err := i.CheckStatus()
+			err = i.CheckStatus()
 			if tc.wantErr {
 				assert.Error(t, err)
 			} else {
@@ -235,4 +237,65 @@ func TestCheckStatus(t *testing.T) {
 			}
 		})
 	}
+}
+
+// ---- FileStore tests ----
+
+func TestFileStore_LoadSave(t *testing.T) {
+	cfg := &config.IPAMConfig{DataDir: t.TempDir()}
+	fs := newFileStore(cfg)
+
+	initial, err := fs.Load()
+	require.NoError(t, err)
+	require.Empty(t, initial.Allocations)
+
+	want := &AllocationStore{
+		Allocations: []Allocation{
+			{IP: "10.0.0.2", ContainerID: "ctr1"},
+		},
+	}
+	require.NoError(t, fs.Save(want))
+
+	loaded, err := fs.Load()
+	require.NoError(t, err)
+	require.Len(t, loaded.Allocations, 1)
+	assert.Equal(t, "10.0.0.2", loaded.Allocations[0].IP)
+	assert.Equal(t, "ctr1", loaded.Allocations[0].ContainerID)
+}
+
+// ---- Mock Store tests ----
+
+// mockStore is an in-memory Store for testing IPAM without filesystem.
+type mockStore struct {
+	allocs []Allocation
+}
+
+func (m *mockStore) Lock() (func(), error) { return func() {}, nil }
+func (m *mockStore) Load() (*AllocationStore, error) {
+	return &AllocationStore{Allocations: append([]Allocation(nil), m.allocs...)}, nil
+}
+func (m *mockStore) Save(store *AllocationStore) error {
+	m.allocs = append([]Allocation(nil), store.Allocations...)
+	return nil
+}
+
+// Compile-time interface check.
+var _ Store = (*mockStore)(nil)
+
+func TestIPAM_WithMockStore_BindAndRelease(t *testing.T) {
+	cfg := &config.IPAMConfig{
+		Ranges: [][]config.Range{
+			{{Subnet: "10.0.0.0/24", RangeStart: "10.0.0.2", RangeEnd: "10.0.0.10"}},
+		},
+	}
+	ms := &mockStore{}
+	i := IPAM{config: cfg, netlinkAdd: noopAddrAdd, store: ms}
+
+	addr, err := i.BindNewAddr(&mockLink{}, "ctr1")
+	require.NoError(t, err)
+	assert.Equal(t, "10.0.0.2", addr.IP.String())
+	require.Len(t, ms.allocs, 1)
+
+	require.NoError(t, i.ReleaseAddr("ctr1"))
+	assert.Empty(t, ms.allocs)
 }

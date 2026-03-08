@@ -9,10 +9,12 @@ type NetConf struct {
 }
 
 type IPAMConfig struct {
-	Type    string    `json:"type"`
-	DataDir string    `json:"dataDir"`
-	Ranges  [][]Range `json:"ranges"`
-	Routes  []Route   `json:"routes"`
+	Type          string    `json:"type"`
+	DataDir       string    `json:"dataDir"`
+	Ranges        [][]Range `json:"ranges"`
+	Routes        []Route   `json:"routes"`
+	Backend       string    `json:"backend,omitempty"`
+	EtcdEndpoints []string  `json:"etcdEndpoints,omitempty"`
 }
 
 type Range struct {

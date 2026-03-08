@@ -39,7 +39,11 @@ func New() *Network {
 		ns:      nswrapper.NewNS(),
 		ipt:     ipt,
 		newIPAM: func(cfg *config.IPAMConfig) ipamIface {
-			i := ipam.NewIPAM(cfg)
+			i, err := ipam.NewIPAM(cfg)
+			if err != nil {
+				logging.Logger.Error("ipam_init_failed", "error", err)
+				return nil
+			}
 			return &i
 		},
 	}

@@ -1,23 +1,13 @@
 package ipam
 
 import (
-	"encoding/json"
 	"fmt"
 	"net"
-	"os"
-	"path/filepath"
-	"syscall"
 
 	"github.com/innfi/probable-eureka/pkg/config"
 	"github.com/innfi/probable-eureka/pkg/logging"
 
 	"github.com/vishvananda/netlink"
-)
-
-const (
-	defaultDataDir  = "/var/lib/cni/networks"
-	lockFileName    = ".lock"
-	allocationsFile = "allocations.json"
 )
 
 type Allocation struct {
@@ -32,14 +22,19 @@ type AllocationStore struct {
 type IPAM struct {
 	config     *config.IPAMConfig
 	netlinkAdd func(link netlink.Link, addr *netlink.Addr) error
+	store      Store
 }
 
-func NewIPAM(config *config.IPAMConfig) IPAM {
-	return IPAM{config: config, netlinkAdd: netlink.AddrAdd}
+func NewIPAM(cfg *config.IPAMConfig) (IPAM, error) {
+	s, err := NewStore(cfg)
+	if err != nil {
+		return IPAM{}, fmt.Errorf("failed to create IPAM store: %w", err)
+	}
+	return IPAM{config: cfg, netlinkAdd: netlink.AddrAdd, store: s}, nil
 }
 
 func (ipam *IPAM) BindNewAddr(link netlink.Link, containerID string) (*netlink.Addr, error) {
-	unlock, err := ipam.acquireLock()
+	unlock, err := ipam.store.Lock()
 	if err != nil {
 		return nil, fmt.Errorf("failed to acquire lock: %w", err)
 	}
@@ -54,7 +49,15 @@ func (ipam *IPAM) BindNewAddr(link netlink.Link, containerID string) (*netlink.A
 		return nil, err
 	}
 
-	if err := ipam.saveAllocation(addr.IP.String(), containerID); err != nil {
+	store, err := ipam.store.Load()
+	if err != nil {
+		return nil, err
+	}
+	store.Allocations = append(store.Allocations, Allocation{
+		IP:          addr.IP.String(),
+		ContainerID: containerID,
+	})
+	if err := ipam.store.Save(store); err != nil {
 		return nil, fmt.Errorf("failed to save allocation: %w", err)
 	}
 
@@ -64,79 +67,6 @@ func (ipam *IPAM) BindNewAddr(link netlink.Link, containerID string) (*netlink.A
 	)
 
 	return addr, nil
-}
-
-func (ipam *IPAM) dataDir() string {
-	if ipam.config.DataDir != "" {
-		return ipam.config.DataDir
-	}
-	return defaultDataDir
-}
-
-func (ipam *IPAM) acquireLock() (func(), error) {
-	dir := ipam.dataDir()
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create data directory: %w", err)
-	}
-
-	lockPath := filepath.Join(dir, lockFileName)
-	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0600)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open lock file: %w", err)
-	}
-
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
-		f.Close()
-		return nil, fmt.Errorf("failed to acquire file lock: %w", err)
-	}
-
-	return func() {
-		syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
-		f.Close()
-	}, nil
-}
-
-func (ipam *IPAM) loadAllocations() (*AllocationStore, error) {
-	allocPath := filepath.Join(ipam.dataDir(), allocationsFile)
-
-	data, err := os.ReadFile(allocPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return &AllocationStore{Allocations: []Allocation{}}, nil
-		}
-		return nil, fmt.Errorf("failed to read allocations file: %w", err)
-	}
-
-	var store AllocationStore
-	if err := json.Unmarshal(data, &store); err != nil {
-		return nil, fmt.Errorf("failed to parse allocations file: %w", err)
-	}
-
-	return &store, nil
-}
-
-func (ipam *IPAM) saveAllocation(ip, containerID string) error {
-	store, err := ipam.loadAllocations()
-	if err != nil {
-		return err
-	}
-
-	store.Allocations = append(store.Allocations, Allocation{
-		IP:          ip,
-		ContainerID: containerID,
-	})
-
-	data, err := json.MarshalIndent(store, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal allocations: %w", err)
-	}
-
-	allocPath := filepath.Join(ipam.dataDir(), allocationsFile)
-	if err := os.WriteFile(allocPath, data, 0644); err != nil {
-		return fmt.Errorf("failed to write allocations file: %w", err)
-	}
-
-	return nil
 }
 
 func (ipam *IPAM) parseIPRange() (startIP, endIP net.IP, subnet *net.IPNet, err error) {
@@ -190,7 +120,7 @@ func (ipam *IPAM) newAddr() (*netlink.Addr, error) {
 }
 
 func (ipam *IPAM) findAvailableIP(start, end net.IP) net.IP {
-	store, err := ipam.loadAllocations()
+	store, err := ipam.store.Load()
 	if err != nil {
 		return nil
 	}
@@ -210,13 +140,13 @@ func (ipam *IPAM) findAvailableIP(start, end net.IP) net.IP {
 }
 
 func (ipam *IPAM) ReleaseAddr(containerID string) error {
-	unlock, err := ipam.acquireLock()
+	unlock, err := ipam.store.Lock()
 	if err != nil {
 		return fmt.Errorf("failed to acquire lock: %w", err)
 	}
 	defer unlock()
 
-	store, err := ipam.loadAllocations()
+	store, err := ipam.store.Load()
 	if err != nil {
 		return err
 	}
@@ -237,27 +167,17 @@ func (ipam *IPAM) ReleaseAddr(containerID string) error {
 		kept = []Allocation{}
 	}
 
-	data, err := json.MarshalIndent(&AllocationStore{Allocations: kept}, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal allocations: %w", err)
-	}
-
-	allocPath := filepath.Join(ipam.dataDir(), allocationsFile)
-	if err := os.WriteFile(allocPath, data, 0644); err != nil {
-		return fmt.Errorf("failed to write allocations file: %w", err)
-	}
-
-	return nil
+	return ipam.store.Save(&AllocationStore{Allocations: kept})
 }
 
 func (ipam *IPAM) ReleaseStaleAllocations(validContainerIDs map[string]bool) ([]Allocation, error) {
-	unlock, err := ipam.acquireLock()
+	unlock, err := ipam.store.Lock()
 	if err != nil {
 		return nil, fmt.Errorf("failed to acquire lock: %w", err)
 	}
 	defer unlock()
 
-	store, err := ipam.loadAllocations()
+	store, err := ipam.store.Load()
 	if err != nil {
 		return nil, err
 	}
@@ -276,25 +196,14 @@ func (ipam *IPAM) ReleaseStaleAllocations(validContainerIDs map[string]bool) ([]
 		return nil, nil
 	}
 
-	data, err := json.MarshalIndent(&AllocationStore{Allocations: kept}, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal allocations: %w", err)
-	}
-
-	allocPath := filepath.Join(ipam.dataDir(), allocationsFile)
-	if err := os.WriteFile(allocPath, data, 0644); err != nil {
-		return nil, fmt.Errorf("failed to write allocations file: %w", err)
+	if err := ipam.store.Save(&AllocationStore{Allocations: kept}); err != nil {
+		return nil, err
 	}
 
 	return released, nil
 }
 
 func (ipam *IPAM) CheckStatus() error {
-	dir := ipam.dataDir()
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("IPAM data directory not accessible: %w", err)
-	}
-
 	startIP, endIP, _, err := ipam.parseIPRange()
 	if err != nil {
 		return err
