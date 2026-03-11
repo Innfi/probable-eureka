@@ -25,6 +25,7 @@ TEST_NS_PATH="/var/run/netns/${TEST_NS}"
 CONTAINER_ID="eureka-test-00000001"
 DATA_DIR="$(mktemp -d /tmp/eureka-test-XXXXXX)"
 CNI_CONFIG=""
+DEL_CONFIG=""
 
 # ── cleanup ───────────────────────────────────────────────────────────────────
 cleanup() {
@@ -32,7 +33,14 @@ cleanup() {
     set +e
     echo "--- cleanup ---"
     # Best-effort DEL in case the test failed before its own DEL
-    if [ -n "${CNI_CONFIG}" ]; then
+    if [ -n "${DEL_CONFIG}" ]; then
+        CNI_COMMAND=DEL \
+        CNI_CONTAINERID="${CONTAINER_ID}" \
+        CNI_NETNS="${TEST_NS_PATH}" \
+        CNI_IFNAME=eth0 \
+        CNI_PATH="${CNI_BIN_DIR}" \
+        "${CNI_BIN_DIR}/${BINARY_NAME}" <<< "${DEL_CONFIG}" 2>/dev/null || true
+    elif [ -n "${CNI_CONFIG}" ]; then
         CNI_COMMAND=DEL \
         CNI_CONTAINERID="${CONTAINER_ID}" \
         CNI_NETNS="${TEST_NS_PATH}" \
@@ -128,16 +136,18 @@ echo "CHECK OK"
 
 # ── DEL ───────────────────────────────────────────────────────────────────────
 echo "=== DEL ==="
+DEL_CONFIG=$(echo "${CNI_CONFIG}" | jq --argjson prev "${ADD_RESULT}" '. + {prevResult: $prev}')
 CNI_COMMAND=DEL \
 CNI_CONTAINERID="${CONTAINER_ID}" \
 CNI_NETNS="${TEST_NS_PATH}" \
 CNI_IFNAME=eth0 \
 CNI_PATH="${CNI_BIN_DIR}" \
-"${CNI_BIN_DIR}/${BINARY_NAME}" <<< "${CNI_CONFIG}"
+"${CNI_BIN_DIR}/${BINARY_NAME}" <<< "${DEL_CONFIG}"
 echo "DEL OK"
 
 # Clear so cleanup skips the best-effort DEL (already done above)
 CNI_CONFIG=""
+DEL_CONFIG=""
 
 echo ""
 echo "=== INTEGRATION TEST PASSED ==="
