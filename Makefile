@@ -9,7 +9,7 @@ CNI_BIN_DIR := /opt/cni/bin
 CNI_CONF_DIR := /etc/cni/net.d
 CONFLIST := deployments/10-eureka.conflist
 
-.PHONY: all build clean test vet fmt lint tidy install uninstall image help
+.PHONY: all build clean test vet fmt lint tidy install uninstall image e2e help
 
 all: fmt vet build
 
@@ -60,6 +60,9 @@ uninstall:
 image:
 	docker build -t $(BINARY_NAME):latest .
 
+e2e:
+	bash scripts/e2e-kind.sh
+
 help:
 	@echo "Available targets:"
 	@echo "  all        Run fmt, vet, and build"
@@ -76,3 +79,4 @@ help:
 	@echo "  install    (root) Install binary to $(CNI_BIN_DIR) and conflist to $(CNI_CONF_DIR)"
 	@echo "  uninstall  (root) Remove installed binary and conflist"
 	@echo "  image      Build Docker installer image $(BINARY_NAME):latest"
+	@echo "  e2e        Run end-to-end test on a local kind cluster"
