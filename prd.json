@@ -92,7 +92,7 @@
       "title": "End-to-end test: CNI on a local kind cluster with pod connectivity",
       "description": "Create scripts/e2e-kind.sh. Steps: (1) Validate prerequisites: kind, kubectl, docker (or podman), make — print a clear error and exit 1 if any is missing. (2) Build the CNI installer image with 'make image'. (3) Create a kind cluster using a cluster config file (scripts/kind-config.yaml) that disables the default CNI (networking.disableDefaultCNI: true) and sets podSubnet to '10.244.0.0/16'. (4) Load the installer image into the cluster with 'kind load docker-image probable-eureka:latest'. (5) Apply deployments/configmap.yaml and deployments/daemonset.yaml; wait for the DaemonSet rollout to complete (kubectl rollout status). (6) Deploy a minimal test workload: a single nginx Deployment with 2 replicas and a ClusterIP Service (define inline with kubectl apply -f - <<EOF), then wait for both pods to be Running. (7) Connectivity checks (all must exit 0): (a) pod-to-pod: exec into pod-1 and curl pod-2's pod IP on port 80; (b) pod-to-service: exec into pod-1 and curl the ClusterIP:80; (c) egress: exec into pod-1 and curl -s --max-time 5 http://example.com (or a reliable external endpoint). (8) Cleanup: 'kind delete cluster --name eureka-e2e' in a trap EXIT handler (always runs). Add a 'make e2e' target to the Makefile that runs scripts/e2e-kind.sh.",
       "acceptance": "scripts/e2e-kind.sh exits 0 on a machine with kind, kubectl, and docker installed; all three connectivity checks pass; 'kind delete cluster' runs on exit regardless of success or failure; make e2e is listed in make help.",
-      "status": "incomplete"
+      "status": "complete"
     }
   ]
 }

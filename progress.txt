@@ -105,6 +105,16 @@
 - CounterVec/HistogramVec only emit series after WithLabelValues() is called; Gather() on an unpopulated registry returns empty — tests must seed observations before asserting metric names via Gather().
 - go mod tidy makes prometheus/client_golang direct in go.mod; etcd already pulled in many transitive prometheus deps as indirect.
 
+## e2e-kind
+- scripts/kind-config.yaml: kind.x-k8s.io/v1alpha4, networking.disableDefaultCNI: true, podSubnet: "10.244.0.0/16".
+- kind cluster name "eureka-e2e" → control-plane node container is "eureka-e2e-control-plane".
+- cni0 bridge is NOT created until the first pod's CNI ADD runs; configure gateway IP (ip addr add 10.244.0.1/16 dev cni0) AFTER nginx pods are Running.
+- nginx:alpine uses BusyBox; use wget (not curl) for connectivity checks inside the pod.
+- DaemonSet uses hostNetwork: true so initContainers run before pod CNI is available; no chicken-and-egg problem.
+- trap cleanup EXIT ensures kind delete cluster runs regardless of success or failure.
+- kind load docker-image must be called after cluster creation but before workload deploy.
+- Connectivity checks: pod-to-pod and pod-to-service use pod IP / ClusterIP directly to avoid DNS dependency on CoreDNS (which may not have an IP yet).
+
 ## deploy-daemonset
 - kubectl apply --dry-run=client requires a reachable API server even with --validate=false in kubectl v1.34+; spin up `kind create cluster` for offline validation.
 - DaemonSet uses tolerations: [{operator: Exists}] (no key/effect) to tolerate all taints and run on every node.
